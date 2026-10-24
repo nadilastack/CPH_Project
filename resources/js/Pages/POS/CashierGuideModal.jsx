@@ -118,9 +118,9 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                 <div className="flex gap-3 items-start p-3 bg-gray-50 border rounded-xl">
                   <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center shrink-0 text-xs">3</div>
                   <div>
-                    <h5 className="font-bold text-gray-900">Tulis Catatan Masakan & Nama Tamu (Opsional)</h5>
+                    <h5 className="font-bold text-gray-900">Isi Nama Pelanggan (Wajib Diisi) & Catatan Masakan</h5>
                     <p className="text-gray-600 text-xs mt-0.5">
-                      Isi catatan khusus pelanggan pada kolom catatan di bawah nama menu (misal: <em>"Pedas sedang"</em>, <em>"Es sedikit"</em>, <em>"Kuah dipisah"</em>). Catatan ini dijamin akan tercetak jelas di tiket dapur.
+                      Ketikkan nama tamu / pemesan di kolom <strong>"Nama Customer / Pemesan"</strong>. Kolom ini <strong>wajib diisi</strong> (tidak boleh kosong atau hanya diisi <em>"Pelanggan"</em>; sistem akan menampilkan peringatan jika terlewat). Isi juga catatan khusus menu jika ada (misal: <em>"Pedas sedang"</em>, <em>"Es sedikit"</em>, <em>"Kuah dipisah"</em>) yang akan tercetak di tiket dapur.
                     </p>
                   </div>
                 </div>
@@ -128,8 +128,8 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                 <div className="flex gap-3 items-start p-3 bg-gray-50 border rounded-xl">
                   <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center shrink-0 text-xs">4</div>
                   <div>
-                    <h5 className="font-bold text-gray-900">Pilih Metode Pembayaran (4 Opsi Fleksibel)</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    <h5 className="font-bold text-gray-900">Pilih Metode Pembayaran (5 Opsi Fleksibel Termasuk DP)</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
                       <div className="p-2.5 bg-white border border-emerald-300 rounded-lg text-xs">
                         <strong className="text-emerald-700">💵 Tunai (Cash):</strong> Ketikkan nominal uang kertas yang diserahkan pelanggan. Sistem otomatis menghitung nominal kembalian.
                       </div>
@@ -139,8 +139,11 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                       <div className="p-2.5 bg-white border border-purple-300 rounded-lg text-xs">
                         <strong className="text-purple-700">⚡ SPLIT (Tunai + QRIS):</strong> Pelanggan bayar sebagian tunai dan sisanya via QRIS. Masukkan nominal di masing-masing kolom.
                       </div>
-                      <div className="p-2.5 bg-white border border-amber-300 rounded-lg text-xs">
-                        <strong className="text-amber-700">⚠️ Bayar Nanti (UNPAID):</strong> Untuk tamu yang makan dahulu dan membayar saat hidangan tiba / selesai makan.
+                      <div className="p-2.5 bg-white border border-yellow-300 rounded-lg text-xs bg-yellow-50/30">
+                        <strong className="text-yellow-800">💰 Uang Muka (DP):</strong> Masukkan nominal DP dan pilih metode bayar DP (Cash/QRIS). Sistem otomatis menghitung sisa yang harus dilunasi, mencetak Struk DP, dan menandai meja wajib pelunasan.
+                      </div>
+                      <div className="p-2.5 bg-white border border-amber-300 rounded-lg text-xs sm:col-span-2 lg:col-span-1">
+                        <strong className="text-amber-700">⚠️ Bayar Nanti (UNPAID):</strong> Untuk tamu yang makan dahulu dan membayar saat hidangan tiba / selesai makan tanpa DP.
                       </div>
                     </div>
                   </div>
@@ -187,9 +190,9 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="p-3 bg-gray-50 border rounded-xl">
-                  <h5 className="font-bold text-gray-900">Langkah 3: Pilih Menu Tambahan di Katalog Menu</h5>
+                  <h5 className="font-bold text-gray-900">Langkah 3: Pilih Menu Tambahan & Isi Catatan Khusus Per-Item</h5>
                   <p className="text-gray-600 text-xs mt-0.5">
-                    Klik hidangan yang ingin ditambah di katalog kiri (misal: tambah 2x Teh Es dan 1x French Fries). Atur jumlah porsi.
+                    Klik hidangan yang ingin ditambah di katalog kiri (misal: tambah 2x Teh Es dan 1x French Fries). Atur jumlah porsi (+ / -). Pada setiap item menu tambahan di keranjang, kasir dapat mengisi <strong>Catatan Khusus</strong> (contoh: <em>"pedas level 2"</em>, <em>"tanpa es"</em>, <em>"kuah pisah"</em>) yang akan langsung dicetak pada tiket masak dapur.
                   </p>
                 </div>
 
@@ -209,13 +212,22 @@ export default function CashierGuideModal({ isOpen, onClose }) {
 
                 <div className="p-3 bg-gray-50 border rounded-xl">
                   <h5 className="font-bold text-gray-900">Langkah 5: Klik [🍳 Kirim Menu Tambahan ke Dapur]</h5>
-                  <div className="mt-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900 space-y-1">
-                    <strong>💡 Aturan Struk Cerdas:</strong>
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-300 rounded-lg text-xs text-blue-950 space-y-1">
+                    <strong>💡 Fitur Pemilih Cetak Dapur & Struk Cerdas:</strong>
                     <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-                      <li><strong>Dapur:</strong> Hanya mencetak <em>Ticket Dapur Tambahan</em> berisi menu yang baru dipesan dengan badge: <code>★ HANYA MASAK MENU TAMBAHAN INI ★</code>. Dapur dijamin tidak akan memasak ulang pesanan awal!</li>
-                      <li><strong>Customer:</strong> Struk pelanggan mencantumkan seluruh pesanan secara transparan: <code>▶ PESANAN AWAL</code> dan <code>▶ PESANAN TAMBAHAN</code> lengkap dengan subtotal masing-masing dan Total Akumulasi Meja.</li>
+                      <li><strong>Pilihan Cetak Dapur:</strong> Kasir dapat memilih <code>[⚡ Hanya Tambahan]</code> (khusus menu baru) atau <code>[📋 Semua Pesanan]</code> (seluruh menu dengan kotak pemisah batch tebal dan badge kontras <code>★ MENU TAMBAHAN (MASAK INI) ★</code>).</li>
+                      <li><strong>Struk Customer:</strong> Mencantumkan seluruh pesanan secara transparan: <code>▶ PESANAN AWAL</code> dan <code>▶ PESANAN TAMBAHAN</code> lengkap dengan subtotal masing-masing dan Total Akumulasi Meja.</li>
                     </ul>
                   </div>
+                </div>
+
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl">
+                  <h5 className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                    <span>✏️</span> Fitur Edit / Koreksi Total Harga Pesanan:
+                  </h5>
+                  <p className="text-emerald-800 text-[11px] mt-1">
+                    Pada bar aksi meja aktif, kasir dapat mengklik tombol <strong>[✏️ Edit Total]</strong> untuk mengubah total harga tagihan secara fleksibel jika ada penyesuaian harga khusus dari manajer atau menu yang terlanjur habis/batal.
+                  </p>
                 </div>
               </div>
             </div>
@@ -478,11 +490,20 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                 </div>
 
                 <div className="p-3 bg-white border rounded-xl space-y-2">
-                  <h5 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs sm:text-sm text-blue-800">
-                    <FiPrinter className="text-blue-600" /> Ekspor Laporan ke PDF, Excel, dan CSV:
+                  <h5 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs sm:text-sm text-indigo-800">
+                    <FiEdit2 className="text-indigo-600" /> Edit Total Tagihan & Status Pembayaran di Laporan:
                   </h5>
                   <p className="text-xs text-gray-600">
-                    Klik dropdown <strong>`[Ekspor ▼]`</strong> pada kartu laporan: unduh berkas <strong>PDF Resmi</strong> (kop surat Palantea A4 landscape), <strong>Excel (.xlsx)</strong>, atau <strong>CSV</strong> untuk arsip pembukuan keuangan.
+                    Pada modal edit transaksi laporan, admin/kasir dapat langsung mengedit <strong>Total Tagihan Pesanan (Rp)</strong> dan mengganti <strong>Status Pembayaran (PAID, DP, UNPAID)</strong> jika terdapat penyesuaian khusus atau DP yang belum tercatat.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-white border rounded-xl space-y-2">
+                  <h5 className="font-bold text-gray-900 flex items-center gap-1.5 text-xs sm:text-sm text-blue-800">
+                    <FiPrinter className="text-blue-600" /> Ekspor Laporan ke PDF, Excel, dan CSV (Dengan 4 Kartu Ringkasan):
+                  </h5>
+                  <p className="text-xs text-gray-600">
+                    Klik dropdown <strong>`[Ekspor ▼]`</strong> pada kartu laporan: unduh berkas <strong>PDF Resmi</strong> (lengkap dengan 4 kotak ringkasan: Total Omzet, Kas Cash, Non-Tunai QRIS, dan Total Transaksi di paling atas dokumen), <strong>Excel (.xlsx)</strong>, atau <strong>CSV</strong> untuk arsip pembukuan keuangan.
                   </p>
                 </div>
               </div>
@@ -498,6 +519,20 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                 </h4>
                 <p className="text-xs text-teal-800">
                   Memahami setelan printer browser agar struk thermal tercetak pekat, pas di tengah kertas, dan tidak terpotong.
+                </p>
+              </div>
+
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl space-y-1 text-xs">
+                <strong className="text-emerald-900 font-bold block">✨ Pembersihan Total Menu Dibatalkan (Bebas Rp 0):</strong>
+                <p className="text-emerald-800 text-[11px]">
+                  Menu yang dibatalkan oleh kasir otomatis disembunyikan 100% dari Struk Customer dan Tiket Dapur. Batch kosong tidak akan pernah dicetak, menjamin tidak ada lagi header struk bertuliskan Rp 0.
+                </p>
+              </div>
+
+              <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-xl space-y-1 text-xs">
+                <strong className="text-yellow-900 font-bold block">💰 Struk DP (Uang Muka) & Struk Pelunasan:</strong>
+                <p className="text-yellow-800 text-[11px]">
+                  Transaksi DP mencetak <em>Struk Uang Muka</em> dengan sisa tagihan yang belum lunas. Saat pelunasan sisa dilakukan, struk akhir mencantumkan rincian DP sebelumnya dan pembayaran pelunasan secara rapi.
                 </p>
               </div>
 
@@ -572,6 +607,18 @@ export default function CashierGuideModal({ isOpen, onClose }) {
                   <div className="p-2 bg-gray-50 rounded border">
                     <strong className="text-gray-900 block">Q: Bagaimana jika tamu ingin dibungkus bawa pulang (Takeaway)?</strong>
                     <span className="text-gray-600 text-[11px]">Jawab: Pilih salah satu nomor meja kosong (misal No. 30), isi nama tamu dan tulis keterangan <em>"BUNGKUS / TAKEAWAY"</em> pada catatan pesanan. Dapur akan otomatis membungkus masakan tersebut.</span>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded border">
+                    <strong className="text-gray-900 block">Q: Bagaimana jika tamu ingin memberikan DP (Uang Muka)?</strong>
+                    <span className="text-gray-600 text-[11px]">Jawab: Pilih opsi pembayaran <strong>[💰 DP]</strong> di keranjang kasir, masukkan nominal uang muka dan cara bayar DP (Cash/QRIS). Sistem otomatis menghitung sisa tagihan yang harus dilunasi nanti saat hidangan diantar / selesai makan via tombol <strong>[💳 PROSES PELUNASAN SISA MEJA]</strong>.</span>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded border">
+                    <strong className="text-gray-900 block">Q: Apakah total harga tagihan bisa diedit manual?</strong>
+                    <span className="text-gray-600 text-[11px]">Jawab: Bisa. Pada meja aktif di kasir, klik tombol <strong>[✏️ Edit Total]</strong> untuk mengubah nominal total tagihan dan mencatat alasannya. Anda juga dapat mengedit total harga pesanan langsung dari modal edit Laporan Penjualan.</span>
+                  </div>
+                  <div className="p-2 bg-gray-50 rounded border">
+                    <strong className="text-gray-900 block">Q: Apakah koki dapur bisa melihat semua menu jika ada pesanan tambahan?</strong>
+                    <span className="text-gray-600 text-[11px]">Jawab: Bisa. Pada pratinjau tiket dapur di kasir, cukup klik tombol <strong>[📋 Semua Pesanan]</strong> sebelum mencetak. Sistem akan mencetak seluruh menu lengkap dengan tanda pemisah batch yang sangat jelas.</span>
                   </div>
                   <div className="p-2 bg-gray-50 rounded border">
                     <strong className="text-gray-900 block">Q: Printer mencetak kertas putih polos tanpa tulisan?</strong>

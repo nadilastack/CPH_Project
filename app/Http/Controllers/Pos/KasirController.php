@@ -44,6 +44,28 @@ class KasirController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        $this->ensureColumnsExist();
+
+        // Auto-recovery: bebaskan meja yang berstatus OCCUPIED tapi tidak memiliki pesanan aktif HARI INI
+        try {
+            $todayStart = now()->startOfDay();
+            $occupiedTables = PosTable::where('status', 'OCCUPIED')->get();
+            foreach ($occupiedTables as $tbl) {
+                if ($tbl->nomor_meja === 'KASIR') {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                    continue;
+                }
+                $hasActiveToday = PosOrder::where('table_id', $tbl->id)
+                    ->whereIn('order_status', ['NEW', 'PROCESSING', 'READY'])
+                    ->where('created_at', '>=', $todayStart)
+                    ->exists();
+
+                if (!$hasActiveToday) {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $tables = PosTable::with(['activeOrder.items.food', 'activeOrder.cashier', 'activeOrder.payment'])
             ->orderBy('nomor_meja', 'asc')
             ->get();
@@ -93,6 +115,21 @@ class KasirController extends Controller
             if (!\Illuminate\Support\Facades\Schema::hasColumn('pos_order_items', 'batch_no')) {
                 \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_order_items ADD COLUMN batch_no INT NOT NULL DEFAULT 1");
             }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'dp_amount')) {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_orders ADD COLUMN dp_amount INT NOT NULL DEFAULT 0");
+            }
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_orders MODIFY COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID'");
+            } catch (\Throwable $e) {}
+
+            try {
+                if (!PosTable::where('nomor_meja', 'KASIR')->exists()) {
+                    PosTable::create([
+                        'nomor_meja' => 'KASIR',
+                        'status' => 'AVAILABLE'
+                    ]);
+                }
+            } catch (\Throwable $e) {}
         } catch (\Exception $e) {
             // Ignore jika sudah ada
         }
@@ -102,11 +139,15 @@ class KasirController extends Controller
     {
         $this->ensureColumnsExist();
 
+        $isQuickOrder = $request->boolean('is_quick_order') || ($request->input('order_type') === 'quick');
+
         $request->validate([
             'table_id' => 'required|exists:pos_tables,id',
-            'nama_pelanggan' => 'nullable|string|max:100',
-            'status_pembayaran' => 'nullable|in:Cash,QRIS,SPLIT,UNPAID',
-            'metode_pembayaran' => 'nullable|in:Cash,QRIS,SPLIT',
+            'nama_pelanggan' => $isQuickOrder ? 'nullable|string|max:100' : 'required|string|min:2|max:100',
+            'status_pembayaran' => 'nullable|in:Cash,QRIS,SPLIT,UNPAID,DP',
+            'metode_pembayaran' => 'nullable|in:Cash,QRIS,SPLIT,DP',
+            'dp_amount' => 'nullable|integer|min:0',
+            'dp_method' => 'nullable|in:Cash,QRIS',
             'jumlah_bayar' => 'nullable|integer|min:0',
             'cash_amount' => 'nullable|integer|min:0',
             'qris_amount' => 'nullable|integer|min:0',
@@ -117,9 +158,22 @@ class KasirController extends Controller
             'catatan' => 'nullable|string|max:500',
         ], [
             'table_id.required' => 'Pilih nomor antrian terlebih dahulu.',
+            'nama_pelanggan.required' => 'Nama pelanggan wajib diisi!',
+            'nama_pelanggan.min' => 'Nama pelanggan minimal 2 karakter!',
             'items.required' => 'Pesanan tidak boleh kosong.',
             'items.min' => 'Minimal pilih 1 item makanan/minuman.',
         ]);
+
+        $namaPelanggan = trim((string) $request->nama_pelanggan);
+        if ($isQuickOrder) {
+            if (empty($namaPelanggan)) {
+                $namaPelanggan = 'Pelanggan Kasir';
+            }
+        } else {
+            if (empty($namaPelanggan) || strcasecmp($namaPelanggan, 'Pelanggan') === 0) {
+                return back()->with('error', 'Nama pelanggan wajib diisi secara spesifik (tidak boleh kosong atau hanya bertuliskan "Pelanggan")!');
+            }
+        }
 
         try {
             DB::beginTransaction();
@@ -127,7 +181,8 @@ class KasirController extends Controller
             // Pessimistic Locking untuk mencegah double order pada nomor antrian sama
             $table = PosTable::where('id', $request->table_id)->lockForUpdate()->first();
 
-            if (!$table || $table->status !== 'AVAILABLE') {
+            $isKasirTable = $table && ($table->nomor_meja === 'KASIR');
+            if (!$table || (!$isKasirTable && $table->status !== 'AVAILABLE')) {
                 DB::rollBack();
                 return back()->with('error', 'Nomor Antrian ' . ($table ? $table->nomor_meja : '') . ' sedang terisi atau perlu dibersihkan!');
             }
@@ -177,28 +232,46 @@ class KasirController extends Controller
                     'harga_satuan' => $food->harga,
                     'subtotal' => $itemSubtotal,
                     'catatan' => $item['catatan'] ?? null,
-                    'is_served' => 0,
+                    'is_served' => $isQuickOrder ? 1 : 0,
                     'status' => 'ACTIVE',
                 ];
             }
 
             // Tentukan status pembayaran awal
             $selectedStatus = $request->status_pembayaran ?: ($request->metode_pembayaran ?: 'UNPAID');
-            $paymentStatus = in_array($selectedStatus, ['Cash', 'QRIS', 'SPLIT']) ? 'PAID' : 'UNPAID';
-            $metodePembayaran = in_array($selectedStatus, ['Cash', 'QRIS', 'SPLIT']) ? $selectedStatus : 'Cash';
+            $dpAmount = 0;
+
+            if ($selectedStatus === 'DP') {
+                $paymentStatus = 'DP';
+                $dpMethod = in_array($request->dp_method, ['Cash', 'QRIS']) ? $request->dp_method : 'Cash';
+                $metodePembayaran = $dpMethod;
+                $dpAmount = (int) ($request->dp_amount ?? 0);
+                if ($dpAmount <= 0) {
+                    $dpAmount = min($subtotal, 50000);
+                }
+            } elseif (in_array($selectedStatus, ['Cash', 'QRIS', 'SPLIT'])) {
+                $paymentStatus = 'PAID';
+                $metodePembayaran = $selectedStatus;
+            } else {
+                $paymentStatus = 'UNPAID';
+                $metodePembayaran = 'Cash';
+            }
+
+            $initialOrderStatus = $isQuickOrder ? 'COMPLETED' : 'NEW';
 
             // Create Order
             $order = PosOrder::create([
                 'nomor_pesanan' => $orderNumber,
-                'nama_pelanggan' => $request->nama_pelanggan ?: 'Pelanggan',
+                'nama_pelanggan' => $namaPelanggan,
                 'table_id' => $table->id,
-                'cashier_id' => Auth::id(),
-                'order_status' => 'NEW',
+                'cashier_id' => Auth::id() ?: 1,
+                'order_status' => $initialOrderStatus,
                 'payment_status' => $paymentStatus,
                 'metode_pembayaran' => $metodePembayaran,
                 'subtotal' => $subtotal,
                 'diskon' => 0,
                 'total' => $subtotal,
+                'dp_amount' => $dpAmount,
                 'catatan' => $request->catatan,
             ]);
 
@@ -231,22 +304,49 @@ class KasirController extends Controller
                     'paid_at' => now(),
                     'status' => 'SUCCESS',
                 ]);
+            } elseif ($paymentStatus === 'DP') {
+                $dpCash = $metodePembayaran === 'Cash' ? $dpAmount : 0;
+                $dpQris = $metodePembayaran === 'QRIS' ? $dpAmount : 0;
+
+                PosPayment::create([
+                    'order_id' => $order->id,
+                    'cashier_id' => Auth::id() ?: 1,
+                    'metode_pembayaran' => $metodePembayaran,
+                    'jumlah_bayar' => $dpAmount,
+                    'cash_amount' => $dpCash,
+                    'qris_amount' => $dpQris,
+                    'kembalian' => 0,
+                    'paid_at' => now(),
+                    'status' => 'SUCCESS',
+                    'catatan_koreksi' => 'Uang Muka (DP) Rp ' . number_format($dpAmount, 0, ',', '.') . ' via ' . $metodePembayaran,
+                ]);
             }
 
             // Create Order Items (Batch 1: Pesanan Awal)
             foreach ($itemsData as $item) {
                 $item['batch_no'] = 1;
+                if ($isQuickOrder) {
+                    $item['is_served'] = 1;
+                }
                 $order->items()->create($item);
             }
 
-            // Update Table Status -> OCCUPIED
-            $table->update(['status' => 'OCCUPIED']);
+            if ($isQuickOrder) {
+                $table->update(['status' => 'AVAILABLE']);
+            } else {
+                // Update Table Status -> OCCUPIED
+                $table->update(['status' => 'OCCUPIED']);
+            }
 
             $order->load(['table', 'cashier', 'items.food', 'payment']);
 
             DB::commit();
 
-            return back()->with('success', 'Pesanan ' . $orderNumber . ' (No. Antrian ' . $table->nomor_meja . ') berhasil dikirim ke Dapur!')
+            $msg = $isQuickOrder
+                ? 'Pesanan Kasir Cepat ' . $orderNumber . ' berhasil dibuat & lunas!'
+                : 'Pesanan ' . $orderNumber . ' (No. Antrian ' . $table->nomor_meja . ') berhasil dikirim ke Dapur!';
+
+            return back()->with('success', $msg)
                 ->with('latestOrder', $order);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -311,13 +411,16 @@ class KasirController extends Controller
             $kembalian = max(0, $totalBayar - $targetBill);
 
             if ($existingPayment) {
+                $initialMethod = $existingPayment->metode_pembayaran;
                 $existingPayment->jumlah_bayar += $totalBayar;
                 $existingPayment->cash_amount += $cashAmount;
                 $existingPayment->qris_amount += $qrisAmount;
                 $existingPayment->kembalian = $kembalian;
-                if ($existingPayment->metode_pembayaran !== $metode) {
+                if ($initialMethod !== $metode && $alreadyPaid > 0) {
                     $existingPayment->metode_pembayaran = 'SPLIT';
                 }
+                $existingPayment->catatan_koreksi = ($existingPayment->catatan_koreksi ? $existingPayment->catatan_koreksi . ' | ' : '') .
+                    'Pelunasan Rp ' . number_format($totalBayar, 0, ',', '.') . ' via ' . $metode;
                 $existingPayment->paid_at = now();
                 $existingPayment->save();
             } else {
@@ -569,6 +672,40 @@ class KasirController extends Controller
     }
 
     /**
+     * Ubah / Koreksi Total Harga Pesanan (Misal: Terlanjur Habis, Penyesuaian Harga, DP, dll)
+     */
+    public function updateOrderTotal(Request $request, $id)
+    {
+        $this->ensureColumnsExist();
+
+        $request->validate([
+            'total' => 'required|integer|min:0',
+            'alasan' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $order = PosOrder::where('id', $id)->lockForUpdate()->firstOrFail();
+            $oldTotal = (int) $order->total;
+            $newTotal = (int) $request->total;
+
+            $order->total = $newTotal;
+            if ($request->filled('alasan')) {
+                $order->catatan = ($order->catatan ? $order->catatan . ' | ' : '') . 'Koreksi Total: Rp ' . number_format($oldTotal, 0, ',', '.') . ' -> Rp ' . number_format($newTotal, 0, ',', '.') . ' (' . $request->alasan . ')';
+            }
+            $order->save();
+
+            DB::commit();
+
+            return back()->with('success', 'Total pesanan ' . $order->nomor_pesanan . ' berhasil diubah menjadi Rp ' . number_format($newTotal, 0, ',', '.'));
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal mengubah total pesanan: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Fetch active tables & orders as JSON for polling
      */
     public function jsonState()
@@ -594,6 +731,26 @@ class KasirController extends Controller
     public function monitor()
     {
         $this->ensureColumnsExist();
+
+        // Auto-recovery: bebaskan meja yang berstatus OCCUPIED tapi tidak memiliki pesanan aktif HARI INI
+        try {
+            $todayStart = now()->startOfDay();
+            $occupiedTables = PosTable::where('status', 'OCCUPIED')->get();
+            foreach ($occupiedTables as $tbl) {
+                if ($tbl->nomor_meja === 'KASIR') {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                    continue;
+                }
+                $hasActiveToday = PosOrder::where('table_id', $tbl->id)
+                    ->whereIn('order_status', ['NEW', 'PROCESSING', 'READY'])
+                    ->where('created_at', '>=', $todayStart)
+                    ->exists();
+
+                if (!$hasActiveToday) {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                }
+            }
+        } catch (\Throwable $e) {}
 
         $tables = PosTable::with(['activeOrder.items.food', 'activeOrder.cashier', 'activeOrder.payment'])
             ->orderBy('nomor_meja', 'asc')
@@ -647,6 +804,62 @@ class KasirController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Gagal menyelesaikan pesanan: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Bersihkan & Selesaikan Pesanan Menggantung dari Hari Kemarin
+     */
+    public function cleanupStaleOrders(Request $request)
+    {
+        $this->ensureColumnsExist();
+
+        try {
+            DB::beginTransaction();
+
+            $todayStart = now()->startOfDay();
+
+            // 1. Ambil semua pesanan dari hari kemarin yang belum diselesaikan
+            $staleOrders = PosOrder::whereIn('order_status', ['NEW', 'PROCESSING', 'READY'])
+                ->where('created_at', '<', $todayStart)
+                ->get();
+
+            $count = 0;
+            foreach ($staleOrders as $staleOrder) {
+                // Selesaikan semua item yang masih aktif
+                $staleOrder->items()->where('status', 'ACTIVE')->update(['is_served' => 1]);
+
+                // Update order status menjadi COMPLETED
+                $staleOrder->update([
+                    'order_status' => 'COMPLETED',
+                    'catatan' => trim(($staleOrder->catatan ?? '') . ' [Auto-Selesai Arsip Kemarin]')
+                ]);
+                $count++;
+            }
+
+            // 2. Normalkan semua meja yang berstatus OCCUPIED jika tidak memiliki pesanan aktif hari ini
+            $occupiedTables = PosTable::where('status', 'OCCUPIED')->get();
+            foreach ($occupiedTables as $tbl) {
+                if ($tbl->nomor_meja === 'KASIR') {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                    continue;
+                }
+                $hasActiveToday = PosOrder::where('table_id', $tbl->id)
+                    ->whereIn('order_status', ['NEW', 'PROCESSING', 'READY'])
+                    ->where('created_at', '>=', $todayStart)
+                    ->exists();
+
+                if (!$hasActiveToday) {
+                    $tbl->update(['status' => 'AVAILABLE']);
+                }
+            }
+
+            DB::commit();
+
+            return back()->with('success', "Berhasil membersihkan {$count} pesanan hari kemarin. Semua meja yang menggantung telah dikosongkan & siap digunakan!");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal membersihkan pesanan: ' . $e->getMessage());
         }
     }
 

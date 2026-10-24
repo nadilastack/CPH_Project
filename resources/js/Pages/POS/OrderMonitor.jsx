@@ -141,6 +141,48 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
   const unpaidCount = activeOrders.filter(o => o.payment_status === 'UNPAID' && o.order_status !== 'CANCELLED').length;
   const completedTodayCount = activeOrders.filter(o => o.order_status === 'COMPLETED').length;
 
+  // Stale Orders Detection (Pesanan Kemarin yang Belum Selesai)
+  const todayDateStr = new Date().toDateString();
+  const isOrderFromYesterday = (order) => {
+    if (!order?.created_at) return false;
+    return new Date(order.created_at).toDateString() !== todayDateStr;
+  };
+
+  const staleActiveOrders = activeOrders.filter(o =>
+    o.order_status !== 'COMPLETED' &&
+    o.order_status !== 'CANCELLED' &&
+    isOrderFromYesterday(o)
+  );
+  const staleCount = staleActiveOrders.length;
+
+  const handleCleanupStale = () => {
+    Swal.fire({
+      title: 'Bersihkan Pesanan Kemarin?',
+      text: `Ditemukan ${staleCount} pesanan dari hari kemarin yang masih menggantung di monitor. Sistem akan menandai selesai pesanan ini dan mengosongkan semua nomor antrian yang tertahan.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ea580c',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: `🧹 Ya, Bersihkan (${staleCount} Pesanan)`,
+      cancelButtonText: 'Batal',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        router.post(route('pos.orders.cleanup-stale'), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            Swal.fire({
+              icon: 'success',
+              title: 'Berhasil Dibersihkan!',
+              text: 'Semua meja dan pesanan hari kemarin telah diselesaikan.',
+              timer: 1800,
+              showConfirmButton: false,
+            });
+          }
+        });
+      }
+    });
+  };
+
   // Toggle Item Served
   const handleToggleItemServed = (item) => {
     router.post(route('pos.order-item.toggle-served', item.id), {}, {
@@ -155,19 +197,41 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
 
   // Selesaikan Pesanan (1-Klik dari Kasir)
   const handleCompleteOrder = (order) => {
+    const isStale = isOrderFromYesterday(order);
+
     if (order.payment_status === 'UNPAID') {
       Swal.fire({
-        title: '⚠️ Pesanan Belum Dibayar!',
-        text: `Pesanan Meja ${order.table?.nomor_meja || '--'} belum dibayar (Total: ${formatRp(order.total)}). Apakah Anda ingin melunasi pembayarannya sekarang?`,
+        title: isStale ? '⚠️ Pesanan Kemarin Belum Dibayar!' : '⚠️ Pesanan Belum Dibayar!',
+        text: `Pesanan Meja ${order.table?.nomor_meja || '--'} belum dibayar (Total: ${formatRp(order.total)}). ${
+          isStale
+            ? 'Ini adalah pesanan dari hari kemarin. Apakah ingin tetap selesaikan & kosongkan meja, atau bayar sekarang?'
+            : 'Apakah Anda ingin melunasi pembayarannya sekarang?'
+        }`,
         icon: 'warning',
         showCancelButton: true,
+        showDenyButton: isStale,
         confirmButtonColor: '#16a34a',
+        denyButtonColor: '#ea580c',
         cancelButtonColor: '#6b7280',
         confirmButtonText: '💳 Bayar Kasir Sekarang',
+        denyButtonText: '🧹 Tetap Selesaikan & Kosongkan Meja',
         cancelButtonText: 'Batal',
       }).then((result) => {
         if (result.isConfirmed) {
           handleOpenPaymentModal(order);
+        } else if (result.isDenied) {
+          router.post(route('pos.order.complete', order.id), {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+              Swal.fire({
+                icon: 'success',
+                title: 'Pesanan Selesai!',
+                text: `Meja ${order.table?.nomor_meja || '--'} telah dikosongkan.`,
+                timer: 1500,
+                showConfirmButton: false,
+              });
+            }
+          });
         }
       });
       return;
@@ -406,6 +470,28 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
 
       <div className="space-y-5 pb-10">
 
+        {/* BANNER PERINGATAN PESANAN KEMARIN */}
+        {staleCount > 0 && (
+          <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-3.5 rounded-2xl shadow-md flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 bg-white/20 rounded-xl text-lg">⚠️</span>
+              <div>
+                <p className="font-black text-sm">Perhatian: Ada {staleCount} Pesanan Menggantung dari Hari Kemarin!</p>
+                <p className="text-xs text-amber-100">
+                  Pesanan ini belum diselesaikan kasir dari hari sebelumnya. Anda dapat membersihkan dan mengosongkan meja dengan 1-klik.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCleanupStale}
+              className="px-4 py-2 bg-white text-orange-700 hover:bg-orange-50 font-black rounded-xl text-xs shadow transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <FiCheckCircle size={15} /> 🧹 Bersihkan & Kosongkan Meja Kemarin ({staleCount})
+            </button>
+          </div>
+        )}
+
         {/* 1. TOP METRIC BADGES */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-white p-3.5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
@@ -467,7 +553,7 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
           </div>
 
           <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-15 gap-1.5">
-            {tables.map(table => {
+            {tables.filter(t => t.nomor_meja !== 'KASIR').map(table => {
               const isSelected = selectedTableFilter === table.id;
               let bg = 'bg-green-50 text-green-800 border-green-200 hover:bg-green-100';
               if (table.status === 'OCCUPIED') bg = 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100 font-bold';
@@ -595,18 +681,29 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center gap-2.5">
                         <div className="px-3 py-1.5 bg-gradient-to-br from-green-700 to-green-800 text-white rounded-xl font-black text-center shadow-xs">
-                          <span className="block text-[9px] uppercase tracking-wider text-green-200 font-bold">MEJA</span>
-                          <span className="text-lg leading-none">{order.table?.nomor_meja || '--'}</span>
+                          <span className="block text-[9px] uppercase tracking-wider text-green-200 font-bold">
+                            {(order.table?.nomor_meja === 'KASIR' || order.nomor_meja === 'KASIR') ? 'KASIR' : 'MEJA'}
+                          </span>
+                          <span className="text-lg leading-none">
+                            {(order.table?.nomor_meja === 'KASIR' || order.nomor_meja === 'KASIR') ? 'CEPAT' : (order.table?.nomor_meja || '--')}
+                          </span>
                         </div>
                         <div>
                           <h4 className="font-mono font-bold text-xs text-gray-900">{order.nomor_pesanan}</h4>
                           <span className="text-xs font-extrabold text-gray-700 uppercase block">
                             {order.nama_pelanggan || 'Pelanggan'}
                           </span>
-                          <span className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
-                            <FiClock size={10} />
-                            {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
-                          </span>
+                          {isOrderFromYesterday(order) ? (
+                            <span className="text-[10px] text-red-600 font-black flex items-center gap-1 mt-0.5 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                              <FiClock size={10} />
+                              ⚠️ KEMARIN ({new Date(order.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric' })})
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                              <FiClock size={10} />
+                              {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                            </span>
+                          )}
                         </div>
                       </div>
 

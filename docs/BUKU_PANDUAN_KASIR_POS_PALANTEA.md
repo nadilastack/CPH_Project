@@ -9,13 +9,13 @@
 2. [BAB 2: Panduan Input & Kelola Kategori Menu Makanan](#bab-2-panduan-input--kelola-kategori-menu-makanan)
 3. [BAB 3: Panduan Input & Kelola Menu Makanan / Minuman (Foto, Harga, Status)](#bab-3-panduan-input--kelola-menu-makanan--minuman-foto-harga-status)
 4. [BAB 4: Manajemen 30 Nomor Antrian Meja Kantin](#bab-4-manajemen-30-nomor-antrian-meja-kantin)
-5. [BAB 5: Alur Transaksi Pesanan Baru di Kasir (Langkah Demi Langkah)](#bab-5-alur-transaksi-pesanan-baru-di-kasir-langkah-demi-langkah)
-6. [BAB 6: Alur Pesanan Tambahan di Meja yang Sama (Add-On Order)](#bab-6-alur-pesanan-tambahan-di-meja-yang-sama-add-on-order)
-7. [BAB 7: Konsep Struk Cerdas: Struk Customer & Tiket Dapur](#bab-7-konsep-struk-cerdas-struk-customer--tiket-dapur)
+5. [BAB 5: Alur Transaksi Pesanan Baru di Kasir (Termasuk Opsi DP)](#bab-5-alur-transaksi-pesanan-baru-di-kasir-langkah-demi-langkah)
+6. [BAB 6: Alur Pesanan Tambahan (Add-On Order) & Catatan Khusus Per-Item](#bab-6-alur-pesanan-tambahan-di-meja-yang-sama-add-on-order)
+7. [BAB 7: Konsep Struk Cerdas: Struk Customer & Tiket Dapur dengan Pemilih Batch](#bab-7-konsep-struk-cerdas-struk-customer--tiket-dapur)
 8. [BAB 8: Monitor Pesanan Kasir (Pusat Kendali Pengganti Layar Dapur)](#bab-8-monitor-pesanan-kasir-pusat-kendali-pengganti-layar-dapur)
-9. [BAB 9: Laporan Penjualan, Rekap Cash vs QRIS, & Koreksi Salah Bayar](#bab-9-laporan-penjualan-rekap-cash-vs-qris--koreksi-salah-bayar)
-10. [BAB 10: Prosedur Pelunasan Pesanan Belum Bayar (UNPAID)](#bab-10-prosedur-pelunasan-pesanan-belum-bayar-unpaid)
-11. [BAB 11: Prosedur Pembatalan Menu & Pembatalan Pesanan Meja](#bab-11-prosedur-pembatalan-menu--pembatalan-pesanan-meja)
+9. [BAB 9: Laporan Penjualan, Ringkasan PDF, & Koreksi Salah Bayar](#bab-9-laporan-penjualan-rekap-cash-vs-qris--koreksi-salah-bayar)
+10. [BAB 10: Prosedur Uang Muka (DP) & Pelunasan Otomatis Sisa Tagihan Meja](#bab-10-prosedur-pelunasan-pesanan-belum-bayar-unpaid)
+11. [BAB 11: Prosedur Pembatalan Menu, Pembersihan Struk, & Edit Total Tagihan](#bab-11-prosedur-pembatalan-menu--pembatalan-pesanan-meja)
 12. [BAB 12: Notifikasi Suara Kasir & Pengaturan Printer Thermal (58mm / 80mm)](#bab-12-notifikasi-suara-kasir--pengaturan-printer-thermal-58mm--80mm)
 13. [BAB 13: Standar Operasional Harian (SOP Buka & Tutup Kasir)](#bab-13-standar-operasional-harian-sop-buka--tutup-kasir)
 14. [BAB 14: Troubleshooting & Tanya Jawab (FAQ)](#bab-14-troubleshooting--tanya-jawab-faq)
@@ -171,11 +171,12 @@ Berikut adalah panduan alur transaksi saat ada tamu baru yang datang memesan di 
 - **Menulis Catatan Khusus Masakan (Request Tamu)**:
   - Di bawah nama menu pada keranjang, ketikkan catatan khusus dari tamu jika ada (contoh: *"Pedas level 3"*, *"Es sedikit"*, *"Kuah dipisah"*, *"Tanpa daun bawang"*).
   - Catatan ini dijamin akan tercetak jelas di tiket masak dapur.
-- **Mengisi Nama Pelanggan (Opsional)**:
-  - Pada kolom *Nama Pelanggan*, ketik nama panggilan tamu (contoh: *"Bpk. Rudi"* atau *"Ibu Maya"*).
+- **Mengisi Nama Pelanggan (Wajib Diisi)**:
+  - Pada kolom *Nama Pelanggan / Pemesan*, ketik nama panggilan tamu (contoh: *"Bpk. Rudi"* atau *"Ibu Maya"*).
+  - Kolom ini **wajib diisi** dan tidak boleh dikosongkan atau hanya diisi "Pelanggan". Jika kasir lupa mengisi, sistem akan menampilkan popup peringatan dan mengarahkan kursor otomatis ke kolom nama sebelum pesanan dapat diproses.
 
 ### Langkah 3: Pilih Metode Pembayaran
-Kasir memiliki 4 pilihan cara bayar yang sangat fleksibel:
+Kasir memiliki 5 pilihan cara bayar yang sangat fleksibel:
 1. **💵 Tunai (Cash)**:
    - Pilih tab **Cash**.
    - Kolom *Uang Diterima* akan muncul. Ketikkan jumlah uang fisik yang diserahkan pelanggan (misal total tagihan Rp 43.000, pelanggan memberikan uang Rp 50.000, ketik `50000`).
@@ -187,8 +188,15 @@ Kasir memiliki 4 pilihan cara bayar yang sangat fleksibel:
 3. **⚡ SPLIT (Kombinasi Tunai + QRIS)**:
    - Digunakan jika pelanggan ingin membayar sebagian tunai dan sisanya transfer QRIS (misal total Rp 100.000, bayar tunai Rp 40.000 dan QRIS Rp 60.000).
    - Masukkan porsi uang tunai di kolom *Cash* dan porsi transfer di kolom *QRIS*.
-4. **⚠️ Bayar Nanti (Belum Bayar / UNPAID)**:
-   - Digunakan jika pelanggan memesan terlebih dahulu dan berniat melunasi pembayaran saat makanan diantar ke meja atau saat pelanggan selesai makan.
+4. **💰 Uang Muka / DP (Down Payment)**:
+   - Digunakan jika pelanggan ingin memberikan uang muka terlebih dahulu (misal acara kumpul keluarga/kantor dengan total pesanan Rp 250.000, tamu menitipkan DP Rp 100.000).
+   - Pilih tombol **`[💰 DP]`**.
+   - Masukkan **Nominal Uang Muka DP (Rp)** dan pilih metode bayar DP (**💵 Tunai** atau **📱 QRIS**).
+   - Sistem secara cerdas menampilkan kalkulasi otomatis:
+     `Sisa Pelunasan Wajib: Rp (Total - DP)`.
+   - Struk yang tercetak berstatus **`💰 STRUK UANG MUKA (DP)`** dan meja ditandai dengan badge khusus DP di kasir agar sisa tagihan dilunasi saat pengantaran menu atau selesai makan.
+5. **⚠️ Bayar Nanti (Belum Bayar / UNPAID)**:
+   - Digunakan jika pelanggan memesan terlebih dahulu dan berniat melunasi pembayaran saat makanan diantar ke meja atau saat pelanggan selesai makan tanpa memberikan DP.
    - Status pesanan akan ditandai **UNPAID**, dan nomor meja akan berkedip kuning/merah dengan badge peringatan agar kasir tidak lupa menagih.
 
 ### Langkah 4: Kirim Pesanan ke Dapur & Cetak Struk
@@ -209,30 +217,35 @@ Seringkali tamu yang sudah duduk ingin memesan menu tambahan (contoh: tambah 2 g
    - Klik nomor meja yang sedang aktif **🔴 Merah (OCCUPIED)** di grid atas (misal Meja No. 05).
    - Panel sebelah kanan akan menampilkan seluruh menu yang sebelumnya sudah dipesan oleh meja tersebut.
 2. **Aktifkan Mode Tambah Menu**:
-   - Tekan tombol biru **`[+ Tambah Menu]`** di atas daftar item.
+   - Tekan tombol biru **`[+ Nambah Menu]`** di bawah kartu tagihan meja.
    - Kotak berwarna biru bertuliskan **Keranjang Menu Tambahan** akan muncul.
 3. **Pilih Menu Tambahan di Katalog**:
    - Klik hidangan tambahan yang diinginkan tamu di katalog kiri.
    - Menu akan masuk ke dalam kotak biru menu tambahan. Sesuaikan jumlah porsi (+ / -).
-4. **Pilih Opsi Pembayaran Menu Tambahan**:
+4. **Menulis Catatan Khusus Per-Item Menu Tambahan**:
+   - Pada setiap kartu item menu tambahan di keranjang biru, terdapat kotak input catatan:
+     `[ Catatan tambahan (mis: pedas, no es)... ]`.
+   - Kasir dapat mengetikkan catatan selera tamu per hidangan (misal: *"pedas level 3"*, *"es terpisah"*, *"tanpa seledri"*).
+   - Catatan ini dijamin tersimpan ke database dan dicetak langsung pada tiket masak koki dapur!
+5. **Pilih Opsi Pembayaran Menu Tambahan**:
    - **`[⚡ Bayar Nanti]` (Rekomendasi)**:
      Nominal menu tambahan akan otomatis digabungkan (*diakumulasikan*) ke dalam total tagihan meja. Pelanggan akan melunasi seluruh tagihan sekaligus saat selesai makan.
    - **`[💵 Tunai]` / `[📱 QRIS]`**:
      Dipilih jika pelanggan ingin langsung membayar lunas menu tambahannya saat itu juga di kasir.
-5. **Kirim Menu Tambahan ke Dapur**:
+6. **Kirim Menu Tambahan ke Dapur**:
    - Klik tombol **`[🍳 Kirim Menu Tambahan ke Dapur]`**.
-   - Sistem akan memunculkan dialog cetak tiket dapur khusus menu tambahan.
+   - Sistem akan memunculkan dialog cetak tiket dapur dengan mode bawaan otomatis **`[⚡ Hanya Tambahan]`**.
 
 ---
 
-## BAB 7: KONSEP STRUK CERDAS: STRUK CUSTOMER & TIKET DAPUR
+## BAB 7: KONSEP STRUK CERDAS: STRUK CUSTOMER & TIKET DAPUR DENGAN PEMILIH BATCH
 
 Sistem Palantea membedakan pencetakan antara kebutuhan Dapur dan Pelanggan agar operasional berjalan tanpa kekeliruan:
 
-### 1. Tiket Dapur Khusus Pesanan Tambahan (Kitchen Add-On Ticket)
-- **Masalah yang Kerap Terjadi di Restoran**: Koki dapur bingung saat melihat struk pesanan tambahan karena mengira seluruh hidangan dari awal harus dimasak ulang.
-- **Solusi Cerdas Palantea**:
-  Tiket dapur untuk pesanan tambahan **HANYA mencetak menu yang baru saja ditambahkan**. Dilengkapi header peringatan mencolok:
+### 1. Pilihan Cetak Tiket Dapur Interaktif (Hanya Tambahan vs Semua Berpemisah):
+Pada preview tiket dapur (di bilah atas sebelum dicetak), kasir diberikan tombol seleksi cepat 1-klik:
+- **`[⚡ Hanya Tambahan (X Item)]` (Standar Rekomendasi Dapur)**:
+  Hanya mencetak menu hidangan yang baru saja ditambahkan tamu dengan header mencolok:
   ```text
   ========================================
      --- TICKET DAPUR (TAMBAHAN) ---
@@ -240,24 +253,37 @@ Sistem Palantea membedakan pencetakan antara kebutuhan Dapur dan Pelanggan agar 
   ========================================
   NO. MEJA: NO. 05
   PELANGGAN: Bpk. Rudi
-  WAKTU PESAN: 15/10/2026, 13.45
+  WAKTU PESAN: 16/10/2026, 13.45
   ----------------------------------------
   DAFTAR MENU (MASAK):
   2X  TEH ES
       * CATATAN: MANIS SEDANG
   1X  FRENCH FRIES
+      * CATATAN: EXTRA SAUS SAMBAL
   ========================================
   *** SEGERA ANTAR SAAT MATANG ***
   ```
-  Dengan konsep ini, koki dapur **100% dijamin tidak akan memasak ulang** hidangan pertama yang sudah disajikan!
+  Juru masak dapur 100% dijamin tidak akan pernah memasak ulang hidangan pertama yang sudah disajikan!
+- **`[📋 Semua Pesanan]` (Seluruh Menu Berpemisah Jelas)**:
+  Jika kasir ingin mencetak seluruh riwayat masakan meja dari awal hingga tambahan, sistem otomatis mengelompokkannya dengan blok pemisah yang sangat kontras:
+  - `▶ PESANAN AWAL (BATCH 1)` dengan latar abu-abu rapi.
+  - `⚡ PESANAN TAMBAHAN #1 (BATCH 2)` lengkap dengan garis tebal dan badge blok `★ MENU TAMBAHAN (MASAK INI) ★`.
+- **Tombol Batch Spesifik**: Kasir dapat memilih mencetak khusus `[Batch 1]`, `[Batch 2]`, dst. bila meja memesan lebih dari 2 kali.
 
-### 2. Struk Pelanggan Lengkap (Customer Receipt)
-- Struk customer mencantumkan seluruh pesanan secara transparan dan dikelompokkan berdasarkan waktu pemesanan (*Batch*):
+### 2. Struk Pelanggan Transparan (Customer Receipt):
+Struk customer mencantumkan seluruh pesanan secara transparan dan dikelompokkan berdasarkan waktu pemesanan (*Batch*):
+- **Struk Transaksi DP (Uang Muka)**:
+  Mencantumkan header `💰 STRUK UANG MUKA (DP)`, rincian menu yang dipesan, nominal `Uang Muka Diterima (Cash/QRIS)`, dan baris merah tebal `SISA TAGIHAN (BELUM LUNAS): Rp ...`.
+- **Struk Pelunasan Akhir**:
+  Mencantumkan `TOTAL AKHIR MEJA`, potongan `Uang Muka (DP) Sebelumnya: - Rp ...`, dan baris `Pelunasan Sisa: Rp ...` beserta metode pembayarannya (Cash, QRIS, atau Split).
+- **Pembersihan Menu Dibatalkan (Bebas Masalah Rp 0)**:
+  Menu yang dibatalkan kasir (`CANCELLED`) disembunyikan total 100% dari struk. Jika seluruh item dalam suatu batch dibatalkan, batch tersebut otomatis dihilangkan sehingga tidak pernah ada lagi kelompok kosong bertuliskan Rp 0.
+
   ```text
   CENTRAL PALANTEA HIDROPONIK
   Jl. Melayu, Babussalam, Mandau
   ----------------------------------------
-  NO. MEJA: NO. 05 (Order #CP-POS-20261015-001)
+  NO. MEJA: NO. 05 (Order #CP-POS-20261016-001)
   PELANGGAN: Bpk. Rudi
   ----------------------------------------
   MENU PESANAN                    SUBTOTAL
@@ -341,39 +367,69 @@ Grafik bilah (*progress bar*) yang memperlihatkan persentase perbandingan pendap
 5. Klik **`[💾 Simpan Perubahan]`**.
 6. **Hasil Seketika**: Laporan Total Kas Tunai berkurang sesuai nilai transaksi dan Total QRIS bertambah secara otomatis! Pembukuan kasir kembali seimbang 100%!
 
-### 5. Ekspor Laporan Multi-Format (PDF, Excel, CSV):
+### 5. Rekapitulasi 4 Kartu Metrik di Header PDF Laporan Penjualan:
+Saat mengunduh laporan penjualan format PDF resmi (`/admin/pos-reports`), di bagian paling atas dokumen tepat di bawah kop surat dan periode tanggal cetak, kini dilengkapi 4 kotak kartu ringkasan eksekutif berbingkai warna (*colored summary cards*):
+1. **TOTAL PENJUALAN (OMZET)**: Berwarna hijau emerald dengan nominal omzet pesanan lunas.
+2. **TOTAL KAS TUNAI (CASH)**: Berwarna hijau tua dengan keterangan pemasukan fisik kasir.
+3. **TOTAL NON-TUNAI (QRIS)**: Berwarna biru dengan keterangan mutasi digital bank/QRIS.
+4. **TOTAL TRANSAKSI**: Berwarna slate/abu-abu netral dengan total jumlah pesanan terlayani.
+Kartu ini memudahkan manajer dan pemilik usaha membaca kesehatan finansial harian kantin dalam 3 detik tanpa harus menghitung manual ratusan baris data transaksi.
+
+### 6. Fitur Edit Total Tagihan & Status Pembayaran di Halaman Laporan:
+Pada modal edit transaksi laporan (`handleOpenEditModal`):
+- Admin/kasir dapat langsung mengedit **Total Tagihan Pesanan (Rp)** jika ada koreksi harga di lapangan.
+- Admin/kasir dapat mengubah status pembayaran antara **PAID (Lunas)**, **DP (Uang Muka)**, dan **UNPAID (Belum Bayar)** jika ada kesalahan pencatatan di lapangan.
+
+### 7. Ekspor Laporan Multi-Format (PDF, Excel, CSV):
 - Pada kartu katalog laporan penjualan atau menu terlaris, klik dropdown **`[Ekspor ▼]`**:
-  - **PDF Resmi**: Mengunduh berkas PDF format A4 Landscape berlogo kop resmi Central Palantea, tabel transaksi rapi, dan tanda tangan pembukuan.
+  - **PDF Resmi**: Mengunduh berkas PDF format A4 Landscape berlogo kop resmi Central Palantea, ringkasan 4 kotak metrik penjualan di paling atas, tabel transaksi rapi, dan tanda tangan pembukuan.
   - **Excel (.xlsx)**: Mengunduh lembar kerja Microsoft Excel untuk diolah lebih lanjut dengan rumus spreadsheet.
   - **CSV**: Mengunduh berkas format data standar untuk integrasi software akuntansi eksternal.
 
 ---
 
-## BAB 10: PROSEDUR PELUNASAN PESANAN BELUM BAYAR (UNPAID)
+## BAB 10: PROSEDUR UANG MUKA (DP) & PELUNASAN OTOMATIS SISA TAGIHAN MEJA
 
-Jika ada pesanan dengan status **⚠️ UNPAID (Belum Bayar)**, kasir dapat melunasinya melalui 3 tempat fleksibel di sistem:
+Sistem POS Palantea memiliki alur cerdas untuk menangani pembayaran bertahap (Down Payment / Uang Muka) dan pelunasan akhir:
 
-### Pilihan 1: Melunasi dari POS Kasir Utama (`/order`)
-1. Klik nomor meja yang berwarna merah/kuning dengan keterangan *UNPAID*.
-2. Pada panel rincian sebelah kanan, klik tombol oranye besar:
-   **`[💳 PROSES PEMBAYARAN (TAGIH CUSTOMER)]`**.
-3. Pilih metode bayar yang digunakan tamu (**Cash**, **QRIS**, atau **SPLIT**).
-4. Masukkan nominal uang yang diterima dan klik **`[Bayar Sekarang]`**.
-5. Struk customer tanda lunas otomatis tercetak.
+### 1. Alur Transaksi Menggunakan Uang Muka (DP):
+1. **Saat Input Pesanan Awal**:
+   - Di kasir POS (`/order`), setelah memilih meja dan menu, klik opsi **`[💰 DP]`**.
+   - Ketik nominal DP yang diterima (misal Rp 100.000 dari total pesanan Rp 240.000).
+   - Pilih metode DP: **Tunai** atau **QRIS**.
+   - Klik **`[🍳 Kirim Pesanan ke Dapur & Cetak Struk]`**.
+   - Struk yang keluar bertuliskan **`💰 STRUK UANG MUKA (DP)`** mencantumkan DP diterima Rp 100.000 dan sisa wajib lunas Rp 140.000.
+2. **Kondisi Meja di Layar Kasir**:
+   - Meja bertanda **🔴 OCCUPIED** dengan badge kuning emas:
+     `💰 Status Uang Muka (DP): Sisa tagihan wajib dilunasi saat pengantaran hidangan atau customer selesai makan`.
+   - Rincian biaya meja menampilkan:
+     - *Total Belanja Meja: Rp 240.000*
+     - *- Uang Muka (DP) Masuk: Rp 100.000*
+     - **Sisa Pelunasan Wajib: Rp 140.000**
+   - Tombol tindakan utama berubah otomatis menjadi: **`[💳 PROSES PELUNASAN SISA MEJA]`**.
 
-### Pilihan 2: Melunasi dari Monitor Pesanan (`/pos/monitor`)
-1. Temukan kartu pesanan meja yang bersangkutan di layar monitor.
-2. Klik tombol oranye **`[💳 Tagih & Bayar Kasir]`**.
-3. Pilih metode bayar dan selesaikan transaksi.
+### 2. Prosedur Pelunasan Sisa Tagihan Meja:
+1. Ketika hidangan diantar ke meja atau tamu hendak pulang, kasir mengklik tombol **`[💳 PROSES PELUNASAN SISA MEJA]`**.
+2. **Modal Pelunasan Otomatis Terbuka**:
+   - Sistem secara otomatis menghitung: `Sisa Wajib Dilunasi = Rp 140.000`.
+   - Nominal tagihan di modal **langsung mengacu pada sisa Rp 140.000** (bukan Rp 240.000 lagi).
+   - Tombol preset cepat (Uang Pas, 50k, 100k, dll.) dan QRIS pas langsung mengacu ke sisa tagihan.
+3. **Pilih Metode Pembayaran Pelunasan**:
+   - **Cash**: Masukkan nominal uang pelunasan, kembalian dihitung otomatis dari sisa tagihan.
+   - **QRIS**: QRIS pas sebesar sisa tagihan.
+   - **SPLIT**: Membagi porsi sisa tagihan ke tunai dan QRIS.
+4. **Otomatisasi Pembukuan Akuntansi**:
+   - Jika DP dibayar tunai (*Cash*) dan pelunasan dibayar via *QRIS* (atau sebaliknya), sistem secara cerdas mencatat transaksi akhir sebagai **`SPLIT`** sehingga laporan penerimaan fisik kasir dan rekening bank tetap 100% seimbang!
+5. Klik **`[Konfirmasi & Lunasi Sisa Tagihan]`**. Meja otomatis kosong kembali (**🟢 AVAILABLE**) dan struk pelunasan lunas tercetak.
 
-### Pilihan 3: Melunasi dari Halaman Laporan Penjualan (`/admin/pos-reports`)
-1. Buka tabel transaksi laporan penjualan.
-2. Transaksi yang belum bayar memiliki badge kuning **`BELUM BAYAR`** dan tombol **`[💳 Bayar]`**.
-3. Klik tombol **`[💳 Bayar]`**, tentukan metode pelunasan, lalu simpan.
+### 3. Pelunasan Pesanan Tanpa DP (UNPAID):
+Untuk pesanan yang murni belum bayar tanpa DP:
+1. Klik meja terkait di POS Kasir (`/order`) lalu klik **`[💳 PROSES PEMBAYARAN (TAGIH CUSTOMER)]`**.
+2. Kasir juga bisa melunasi langsung dari **Monitor Pesanan** (`/pos/monitor`) via tombol **`[💳 Tagih & Bayar Kasir]`** atau dari tabel **Laporan Penjualan** via tombol **`[💳 Bayar]`**.
 
 ---
 
-## BAB 11: PROSEDUR PEMBATALAN MENU & PEMBATALAN PESANAN MEJA
+## BAB 11: PROSEDUR PEMBATALAN MENU, PEMBERSIHAN STRUK, & EDIT TOTAL TAGIHAN
 
 ### 1. Membatalkan Salah Satu Menu dalam Pesanan:
 Jika koki dapur mengabarkan bahwa satu menu tidak bisa dimasak (misal stok telur dadar habis):
@@ -382,6 +438,7 @@ Jika koki dapur mengabarkan bahwa satu menu tidak bisa dimasak (misal stok telur
 3. Klik ikon tempat sampah merah **`[🗑️]`** di sebelah kanan menu tersebut.
 4. Muncul dialog konfirmasi: *"Batalkan Menu Ini? Tagihan meja akan disesuaikan otomatis"*. Klik **`[Ya, Batalkan Menu]`**.
 5. Sistem otomatis mencoret menu tersebut, mengubah statusnya menjadi `CANCELLED`, dan **mengurangi total tagihan meja secara otomatis**.
+6. **Bebas Masalah Rp 0 di Struk**: Menu yang dibatalkan akan **100% disembunyikan dari Struk Customer dan Tiket Dapur**. Dapur tidak akan memasak menu tersebut dan customer tidak akan melihat baris palsu bernilai Rp 0!
 
 ### 2. Membatalkan Seluruh Pesanan Meja (Batal Total):
 Jika tamu mendadak membatalkan seluruh pesanannya dan pulang:
@@ -389,6 +446,16 @@ Jika tamu mendadak membatalkan seluruh pesanannya dan pulang:
 2. Di bagian bawah panel pesanan, klik tombol merah **`[🗑️ Batal Order]`**.
 3. Masukkan alasan pembatalan dan konfirmasi.
 4. Seluruh tagihan dihapuskan, status pesanan menjadi `CANCELLED`, dan meja kembali **🟢 Hijau (AVAILABLE)**.
+
+### 3. Fitur Koreksi / Edit Total Harga Pesanan ([✏️ Edit Total]):
+Jika terjadi kondisi di mana total tagihan meja perlu diubah nominalnya secara langsung oleh kasir (misal: tamu mendapatkan penyesuaian khusus dari manajer, diskon dadakan, atau menu pengganti):
+1. Buka meja aktif di POS Kasir (`/order`).
+2. Di bar tombol meja aktif, klik tombol hijau muda bertuliskan **`[✏️ Edit Total]`**.
+3. Dialog pop-up interaktif akan muncul:
+   - Masukkan **Nominal Total Tagihan Baru (Rp)**.
+   - Masukkan **Alasan Perubahan Total** (contoh: *"Koreksi harga menu habis"* atau *"Penyesuaian DP"*).
+4. Klik **`[Simpan Perubahan]`**.
+5. Total pesanan seketika terupdate di kasir, monitor, dan struk, serta alasan perubahan otomatis tercatat di riwayat koreksi laporan penjualan!
 
 ---
 
@@ -455,6 +522,18 @@ Agar struk tercetak rapi, pas di tengah kertas, dan tidak terpotong:
 
 ### Q5: Bagaimana jika ada pelanggan yang memesan untuk dibungkus pulang (Takeaway)?
 > **Jawab**: Kasir dapat memilih salah satu nomor antrian yang tersedia (misal Meja 30), lalu tuliskan catatan *"BUNGKUS / TAKEAWAY"* di kolom catatan pesanan dan ketikkan nama pelanggan. Dapur akan otomatis membungkus hidangan tersebut dengan kotak makanan.
+
+### Q6: Bagaimana alur jika tamu membayar uang muka (DP) terlebih dahulu?
+> **Jawab**: Saat membuat pesanan awal di kasir, pilih opsi metode bayar **`[💰 DP]`**, masukkan nominal uang muka (misal Rp 100.000) dan pilih metode bayar DP (Cash/QRIS). Sistem otomatis menghitung `Sisa Pelunasan Wajib = Total Tagihan - DP`. Struk awal yang tercetak adalah **Struk Uang Muka (DP)**. Saat hidangan diantar atau tamu selesai makan, kasir cukup mengklik tombol **`[💳 PROSES PELUNASAN SISA MEJA]`**. Sistem secara otomatis mengarahkan kalkulasi pembayaran ke sisa tagihan yang belum lunas.
+
+### Q7: Bagaimana jika total harga tagihan pesanan perlu diubah (koreksi harga)?
+> **Jawab**: Pada kartu meja aktif di layar kasir, klik tombol hijau muda **`[✏️ Edit Total]`**. Masukkan nominal baru dan alasan koreksi. Admin juga bisa mengedit total tagihan pesanan langsung dari modal edit di halaman **Laporan Penjualan** (`/admin/pos-reports`).
+
+### Q8: Kenapa sebelumnya ada item Rp 0 di struk dan bagaimana sekarang?
+> **Jawab**: Dulu jika ada menu pesanan yang dibatalkan kasir, item tersebut terkadang menyisakan baris atau header kelompok bernilai Rp 0. Sekarang sistem telah disempurnakan secara tuntas: setiap menu yang dibatalkan (`CANCELLED`) **100% dihapus dan disembunyikan dari struk pelanggan dan tiket dapur**, sehingga struk selalu bersih, rapi, dan tidak ada lagi subtotal Rp 0.
+
+### Q9: Jika koki dapur ingin melihat semua menu yang dipesan meja (awal + tambahan), apakah bisa?
+> **Jawab**: Sangat bisa! Di atas pratinjau tiket dapur, sistem menyediakan tombol pilihan **`[📋 Semua Pesanan]`**. Jika diklik, printer akan mencetak seluruh menu dari awal hingga tambahan, lengkap dengan **garis pemisah batch tebal dan badge visual yang sangat kontras** sehingga koki tidak akan pernah salah membedakan hidangan lama dan baru.
 
 ---
 *Buku Pedoman Resmi Pengoperasian Sistem Kasir POS & Kantin Central Palantea Hidroponik — Versi Lengkap Oktober 2026*

@@ -1,5 +1,331 @@
 # Catatan Perubahan
 
+## 22 Oktober 2026 (Penyempurnaan Struk Multi-Tahap, Penanganan Pesanan Menggantung Kemarin, & Fitur Kasir Cepat / Grab & Go)
+
+### 1. Perbaikan Struk: Tagihan Belum Lunas & Status Bayar (Poin 1 & 3)
+- **Akar Masalah**: Pada pesanan yang telah membayar pesanan awal via Cash kemudian menambah hidangan via opsi bayar nanti (`UNPAID`), header struk tetap mencetak `Bayar Via: CASH`, sementara di bawah total muncul kotak peringatan `TAGIHAN BELUM LUNAS` tanpa mencantumkan nominal rupiah sisa yang harus dibayar. Hal ini membingungkan kasir dan pelanggan.
+- **Penyempurnaan `Receipt.jsx`**:
+  - **Header Struk Cerdas**: Jika status pembayaran `UNPAID` dan sudah ada pembayaran awal, header menampilkan badge: `Status Tagihan: ⚠️ BELUM LUNAS (ADA TAMBAHAN)` dan `Bayar Via (Awal): CASH`. Jika belum bayar sama sekali, menampilkan `Status Tagihan: ⚠️ BELUM DIBAYAR`.
+  - **Penanda Status Pada Menu**: Setiap kelompok pesanan kini memiliki label transparan:
+    - Pesanan Awal yang sudah tercover pembayaran: `▶ PESANAN AWAL (✓ SUDAH BAYAR)`.
+    - Pesanan Tambahan yang belum dibayar: `▶ PESANAN TAMBAHAN #X (⚠️ BELUM BAYAR)` dengan aksen latar merah kontras.
+  - **Kalkulasi Sisa Kurang Bayar**: Menampilkan rincian tegas:
+    - `TOTAL SEMUA: Rp X`
+    - `Sudah Dibayar Sebelumnya: Rp Y (CASH)`
+    - `SISA YANG BELUM DIBAYAR: Rp Z` dengan instruksi penagihan yang jelas.
+
+### 2. Eliminasi Ambiguitas Pembayaran Kombinasi / SPLIT (Poin 2)
+- **Akar Masalah**: Transaksi multi-tahap (misal: pesanan awal cash Rp 50.000 dengan kembalian Rp 25.000 untuk tagihan Rp 25.000, lalu pesanan tambahan teh es Rp 6.000 via QRIS) sebelumnya dicetak sebagai `Total: Rp 31.000, Bayar Cash: Rp 50.000, Bayar QRIS: Rp 6.000, Kembalian: Rp 25.000`. Pembaca struk mengira terjadi pembayaran dobel atau hitungan tidak sinkron.
+- **Penyempurnaan `Receipt.jsx`**:
+  - Dibuatkan rincian pembayaran bertahap/kombinasi yang terperinci:
+    - `• Uang Tunai Diterima: Rp 50.000`
+    - `• Kembalian Tunai: - Rp 25.000`
+    - `• Nett Tunai Dipakai: Rp 25.000`
+    - `• Pembayaran QRIS: Rp 6.000`
+    - `• Status Pembayaran: ✓ LUNAS (SELESAI)`
+  - Dengan format ini, matematika struk menjadi 100% transparan dan tidak membingungkan.
+
+### 3. Penanganan Pesanan Kemarin yang Menggantung (Poin 4)
+- **Akar Masalah**: Jika kasir/staf lupa menekan tombol "Tandai Selesai & Meja Kosong" saat toko tutup malam hari, keesokan harinya meja tetap berwarna merah (`OCCUPIED`) dan monitor tetap menampilkan pesanan hari kemarin.
+- **Penyempurnaan Backend & Frontend**:
+  - **Auto-Recovery Pergantian Hari (`KasirController.php`)**: Pada method `index()` dan `monitor()`, sistem otomatis memeriksa meja yang berstatus `OCCUPIED` tapi tidak memiliki pesanan aktif hari ini (`created_at >= today()`). Meja tersebut otomatis dinormalkan menjadi `AVAILABLE` sehingga kasir pagi langsung mendapati meja-meja bersih.
+  - **Deteksi Pesanan Kemarin di Monitor (`OrderMonitor.jsx`)**: Kartu pesanan dari hari kemarin diberi badge merah: `⚠️ KEMARIN (DD/MM)`.
+  - **Banner 1-Klik Bersihkan Meja Kemarin (`OrderMonitor.jsx`)**: Jika ada pesanan menggantung dari hari kemarin, monitor menampilkan banner notifikasi khusus dengan tombol `[ 🧹 Bersihkan & Kosongkan Meja Kemarin ]`.
+  - **Endpoint Baru**: `POST /pos/orders/cleanup-stale` di `routes/web.php` dan `KasirController::cleanupStaleOrders` untuk menyelesaikan dan mengosongkan semua pesanan hari lampau dengan aman.
+  - **Fleksibilitas Tombol Meja Kemarin**: Jika kasir menekan tombol selesai pada meja kemarin yang belum lunas, muncul dialog dengan opsi: `[ 💳 Bayar Kasir Sekarang ]` atau `[ 🧹 Tetap Selesaikan & Kosongkan Meja ]`.
+
+### 4. Fitur Baru: "⚡ Pesanan Kasir Cepat / Grab & Go" (Poin 5)
+- **Tujuan**: Memfasilitasi pelanggan yang sudah selesai makan lalu membeli peyek/kerupuk/susu/minuman di depan kasir, atau pembeli takeaway langsung tanpa meja.
+- **Implementasi Fitur (`Kasir.jsx` & `KasirController.php`)**:
+  - **Nomor Meja Virtual `KASIR`**: Dibuatkan meja virtual `nomor_meja = 'KASIR'` yang selalu berstatus `AVAILABLE` dan tidak memblokir 30 meja makan fisik.
+  - **Banner Pilihan Cepat**: Di atas grid nomor meja di halaman kasir, ditambahkan banner menonjol `[ ⚡ Pesanan Kasir Cepat (Grab & Go) ]`.
+  - **Pintasan Otomatis**: Jika kasir mengklik menu tanpa memilih meja terlebih dahulu, muncul dialog ramah yang menawarkan untuk langsung masuk ke mode Kasir Cepat.
+  - **Bypass Validasi Nama**: Nama pelanggan otomatis terisi `"Pelanggan Kasir"` (bebas diedit jika kasir ingin mencantumkan nama).
+  - **Status Instan**: Pesanan kasir cepat otomatis berstatus `COMPLETED` dan `is_served = 1` tanpa membebani antrian masak dapur koki, serta langsung memicu cetak Struk Customer dalam hitungan detik.
+
+### 5. Hasil Uji & Kompilasi
+- `npm run build` sukses 100% tanpa error (vite v6.3.5, 2579 modul terkompilasi rapi).
+
+## 16 Oktober 2026 (Pembaruan Lengkap Buku Panduan Operasional Kasir & Modal Panduan In-App)
+
+### 1. Latar Belakang & Permintaan Pengguna:
+- Pengguna menanyakan apakah **Buku Panduan Kasir** sudah diperbarui sesuai seluruh penambahan dan perbaikan fitur terbaru yang baru saja diselesaikan.
+- Memastikan baik berkas dokumentasi markdown (`docs/BUKU_PANDUAN_KASIR_POS_PALANTEA.md`) maupun modal panduan interaktif dalam aplikasi (`CashierGuideModal.jsx`) memuat instruksi operasional terlengkap yang akurat, mudah dipahami kasir, dan sinkron dengan sistem terkini.
+
+### 2. Bagian Buku Panduan yang Diperbarui:
+1. **Daftar Isi & Bab 5 (Alur Transaksi Pesanan Baru & Metode Bayar)**:
+   - Ditambahkan opsi pembayaran **`[💰 DP]` (Uang Muka)** ke dalam daftar metode bayar.
+   - Dijelaskan langkah pengisian nominal uang muka, pemilihan metode DP (Cash/QRIS), kalkulasi otomatis sisa tagihan, pencetakan **Struk Uang Muka (DP)**, dan penandaan status meja aktif.
+2. **Bab 6 (Alur Pesanan Tambahan / Add-On Order)**:
+   - Ditambahkan panduan pengisian **Catatan Khusus Per-Item Menu Tambahan** di keranjang biru.
+   - Dijelaskan bagaimana catatan per-item hidangan tambahan otomatis tersimpan ke database dan dicetak di tiket dapur koki.
+3. **Bab 7 (Konsep Struk Cerdas & Tiket Dapur dengan Pemilih Batch)**:
+   - Ditambahkan panduan penggunaan **Toolbar Pilihan Cetak Tiket Dapur 1-Klik**:
+     - Mode `[⚡ Hanya Tambahan]` (rekomendasi standar koki agar tidak memasak ulang hidangan awal).
+     - Mode `[📋 Semua Pesanan]` (menampilkan seluruh hidangan dari awal hingga tambahan dengan blok pemisah batch tebal dan kontras tinggi).
+   - Penjelasan transparansi Struk Customer: Struk DP mencantumkan sisa belum lunas, dan Struk Pelunasan mencantumkan riwayat DP sebelumnya.
+4. **Bab 9 (Laporan Penjualan & Rekapitulasi PDF)**:
+   - Ditambahkan dokumentasi mengenai **4 Kotak Ringkasan Metrik di Bagian Atas Header PDF Laporan Penjualan** (Total Omzet, Total Kas Tunai Cash, Total Non-Tunai QRIS, dan Total Transaksi).
+   - Ditambahkan panduan penggunaan fitur **Edit Total Tagihan & Status Pembayaran** langsung dari modal edit transaksi laporan penjualan.
+5. **Bab 10 (Prosedur Uang Muka / DP & Pelunasan Otomatis Sisa Meja)**:
+   - Bab diperluas menjadi panduan komprehensif alur Down Payment (DP) dan pelunasan otomatis.
+   - Menjelaskan bagaimana tombol meja aktif berubah menjadi `[💳 PROSES PELUNASAN SISA MEJA]`, bagaimana sistem secara presisi mengarahkan kalkulasi pembayaran ke `Sisa Wajib Dilunasi`, serta otomatisasi konversi ke metode `SPLIT` jika metode DP dan pelunasan berbeda.
+6. **Bab 11 (Prosedur Pembatalan Menu, Pembersihan Struk, & Edit Total Tagihan)**:
+   - Ditambahkan penjelasan eliminasi 100% item batal dari struk (sehingga tidak ada lagi menu atau subtotal bertuliskan Rp 0).
+   - Ditambahkan panduan penggunaan tombol **`[✏️ Edit Total]`** di meja aktif kasir untuk penyesuaian total harga secara manual beserta pencatatan alasannya.
+7. **Bab 14 (FAQ / Tanya Jawab Operasional Kasir)**:
+   - Ditambahkan poin tanya jawab:
+     - *Q6*: Alur pembayaran uang muka (DP) dan pelunasannya.
+     - *Q7*: Cara mengoreksi total harga tagihan pesanan via tombol `[✏️ Edit Total]`.
+     - *Q8*: Penjelasan tuntas hilangnya menu Rp 0 dari struk kasir.
+     - *Q9*: Cara mencetak seluruh pesanan di tiket dapur dengan tanda pemisah yang jelas.
+
+### 3. Pembaruan Komponen Modal In-App (`CashierGuideModal.jsx`):
+- **Tab 1 (Pesanan Baru)**: Ditambahkan kartu panduan metode pembayaran `💰 Uang Muka (DP)`.
+- **Tab 2 (Pesanan Tambahan)**: Ditambahkan langkah pengisian catatan per-item menu tambahan, penjelasan tombol pemilih cetak dapur (`[⚡ Hanya Tambahan]` vs `[📋 Semua Pesanan]`), dan pengenalan tombol `[✏️ Edit Total]`.
+- **Tab 7 (Laporan & Koreksi)**: Ditambahkan penjelasan fitur edit total tagihan & status di modal laporan serta ringkasan 4 kartu eksekutif di header PDF.
+- **Tab 8 (Struk & Printer)**: Ditambahkan informasi pembersihan menu batal (bebas Rp 0) dan rincian struk DP vs pelunasan.
+- **Tab 9 (SOP & FAQ)**: Ditambahkan FAQ interaktif seputar DP, edit total harga, dan tiket dapur berpemisah.
+
+### 4. Kompilasi & Paket Deployment Hosting:
+- Kompilasi Vite sukses via `npm run build` (22.15s).
+- File arsip hosting cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` telah diperbarui dengan file panduan markdown, modal JSX, dan bundle aset `public/build/` terbaru.
+
+---
+
+## 16 Oktober 2026 (Fitur Koreksi Total Harga Pesanan, Catatan Menu Tambahan, Pembersihan Item Dibatalkan di Struk, Ringkasan Metrik Omzet/Cash/QRIS PDF, & Alur Pembayaran DP + Pelunasan)
+
+### 1. Latar Belakang & Permintaan Pengguna:
+Pengguna mengajukan 5 kebutuhan peningkatan operasional pada sistem POS Kasir dan Laporan:
+1. **Koreksi / Edit Total Harga Pesanan**: Kasir/admin membutuhkan fasilitas untuk mengubah total tagihan pesanan (misalnya jika ada penyesuaian khusus, diskon mendadak, atau menu yang tidak jadi dipesan/habis).
+2. **Catatan Pada Menu Tambahan**: Saat menambah pesanan pada meja aktif (`addonCart`), kasir dapat menginput catatan khusus per item (contoh: *pedas*, *tanpa es*, *kuah dipisah*) seperti pada pesanan awal.
+3. **Pembersihan Item Dibatalkan di Struk (Fix Masalah Rp 0)**: Ditemukan bahwa item yang dihapus/dibatalkan sebelumnya masih muncul di struk dengan nominal Rp 0. Item berstatus `CANCELLED` harus disembunyikan total 100% dari struk customer dan tiket dapur, dan batch kosong tidak boleh dicetak.
+4. **Ringkasan Penjualan di Header PDF Laporan**: Pada file export PDF laporan penjualan, ditambahkan 4 kotak ringkasan di paling atas: Total Penjualan (Omzet), Total Kas Tunai (Cash), Total Non-Tunai (QRIS), dan Total Transaksi.
+5. **Alur Pembayaran Uang Muka (DP) & Pelunasan Otomatis**:
+   - Menambahkan opsi status pembayaran **DP (Uang Muka)**.
+   - Kasir dapat memasukkan nominal DP dan metode pembayaran DP (Cash atau QRIS).
+   - Saat pelunasan sisa tagihan, sistem secara otomatis menghitung `Sisa Wajib Dilunasi = Total Belanja - DP`, menyediakan pilihan metode pelunasan, mencatat metode DP dan pelunasan (otomatis SPLIT jika berbeda), serta mencetak rincian DP & pelunasan di struk.
+
+### 2. Implementasi & Detail Teknis Perubahan:
+
+#### A. Fitur Edit Total Tagihan Pesanan (Poin 1):
+- **Backend Route & Controller (`KasirController.php` & `routes/web.php`)**:
+  - Dibuat route `POST /pos/order/{id}/update-total` (`KasirController::updateOrderTotal`).
+  - Menerima validasi `'total' => 'required|integer|min:0'` dan `'alasan' => 'nullable|string'`.
+  - Mengupdate `total` pesanan dan mencatat alasan perubahan pada `catatan_koreksi` di tabel `pos_payments`.
+- **Frontend POS Kasir (`Kasir.jsx`)**:
+  - Ditambahkan tombol aksi `[✏️ Edit Total]` pada bar tindakan meja aktif (`OCCUPIED`).
+  - Menampilkan dialog interaktif `Swal.fire` dengan input nominal harga baru dan input alasan perubahan.
+- **Frontend Laporan Admin (`ReportIndex.jsx`) & Controller (`PosReportController.php`)**:
+  - Pada modal edit transaksi laporan (`handleOpenEditModal`), ditambahkan input:
+    - `Total Tagihan Pesanan (Rp)`: Dapat langsung diedit nominalnya oleh admin/kasir.
+    - `Status Pembayaran`: Dropdown pilihan `PAID`, `DP`, atau `UNPAID`.
+  - Nilai total tagihan dan status pembayaran langsung tersinkronisasi ke database melalui `PosReportController::updatePaymentNote`.
+
+#### B. Catatan Masakan Per-Item Pada Penambahan Menu (Poin 2):
+- **State & Handler Frontend (`Kasir.jsx`)**:
+  - Ditambahkan fungsi `handleUpdateAddonNote(foodId, text)` untuk memperbarui properti `catatan` pada item `addonCart`.
+  - Pada setiap kartu item menu tambahan di keranjang samping, disediakan kotak input catatan:
+    `<input placeholder="Catatan tambahan (mis: pedas, no es)..." value={item.catatan} />`.
+  - Fungsi `handleSubmitAddonOrder` mengirimkan array `items` dengan properti `catatan: item.catatan`.
+- **Penyimpanan Database (`KasirController.php`)**:
+  - Metode `addItemsToOrder` memvalidasi `'items.*.catatan' => 'nullable|string|max:255'` dan menyimpannya langsung ke kolom `catatan` pada tabel `pos_order_items`.
+  - Koki dapur langsung menerima catatan hidangan tambahan pada tiket dapur (`Receipt.jsx`).
+
+#### C. Eliminasi Total Item Dibatalkan dari Struk & Tiket Dapur (Poin 3 - Fix Rp 0):
+- **Investigasi Masalah**: Ketika kasir membatalkan item dari pesanan aktif (`handleCancelOrderItem`), item di database diubah statusnya menjadi `'CANCELLED'`. Pada struk sebelumnya, item berstatus batal ini masih ter-render atau menyisakan batch kosong dengan subtotal Rp 0.
+- **Solusi Tuntas di `Receipt.jsx`**:
+  - **Struk Customer**: Seluruh item difilter ketat `item.status !== 'CANCELLED'`. Pengelompokan batch hanya memasukkan item aktif. Jika suatu batch seluruh itemnya dibatalkan (0 item aktif), grup batch tersebut diabaikan total sehingga tidak pernah ada header batch palsu bertuliskan Rp 0.
+  - **Tiket Dapur**: Item berstatus batal disaring keluar dari daftar masakan dapur (`allItems = items.filter(it => it.status !== 'CANCELLED')`), sehingga juru masak tidak akan pernah melihat item yang sudah dibatalkan.
+
+#### D. Ringkasan Eksekutif Metrik Penjualan di Header PDF Laporan (Poin 4):
+- **Controller Backend (`PosReportController.php`)**:
+  - Pada fungsi `exportPenjualan()`, sistem menghitung 4 metrik agregat:
+    - `$totalRevenue`: Total omzet penjualan lunas.
+    - `$totalCash`: Total penerimaan uang tunai fisik.
+    - `$totalQris`: Total mutasi non-tunai QRIS / Bank.
+    - `$totalTransactions`: Total jumlah order/transaksi terlayani.
+  - Dikirimkan ke template PDF melalui array `summary`.
+- **Desain Template PDF (`pdf.blade.php`)**:
+  - Di bawah judul header dan informasi periode cetak, ditambahkan tabel grid 4 kolom modern berbingkai warna (*colored summary cards*):
+    1. **TOTAL PENJUALAN (OMZET)**: Berwarna hijau emerald dengan nominal omzet tebal.
+    2. **TOTAL KAS TUNAI (CASH)**: Berwarna hijau tua dengan keterangan pemasukan fisik kasir.
+    3. **TOTAL NON-TUNAI (QRIS)**: Berwarna biru dengan keterangan mutasi digital.
+    4. **TOTAL TRANSAKSI**: Berwarna slate/abu-abu netral dengan total jumlah pesanan terlayani.
+
+#### E. Fitur Lengkap Uang Muka (DP) & Pelunasan Otomatis (Poin 5):
+- **Struktur Database (`2026_10_16_100000_add_dp_status_and_dp_amount_to_pos_orders.php`)**:
+  - Memodifikasi kolom `pos_orders.payment_status` menjadi `VARCHAR(20) NOT NULL DEFAULT 'UNPAID'` (mendukung nilai `'PAID'`, `'UNPAID'`, dan `'DP'`).
+  - Menambahkan kolom `pos_orders.dp_amount INT NULL DEFAULT 0` untuk mencatat nominal uang muka.
+  - Model `PosOrder.php`: Menambahkan `dp_amount` ke dalam array `$fillable`.
+  - Controller `ensureColumnsExist()`: Ditambahkan auto-migration guard agar kolom `dp_amount` dan perubahan enum `payment_status` dieksekusi otomatis di hosting cPanel tanpa perlu migrate manual.
+- **Frontend Pemesanan POS Kasir (`Kasir.jsx`)**:
+  - Pada baris opsi metode bayar keranjang pesanan baru, ditambahkan tombol `[💰 DP]`.
+  - Saat tombol DP dipilih, kasir dapat:
+    - Memasukkan nominal Uang Muka DP (Rp).
+    - Memilih metode bayar DP (`💵 Tunai` atau `📱 QRIS`).
+    - Sistem menampilkan preview otomatis: `Sisa Pelunasan Wajib: Rp (Total - DP)`.
+    - Dilengkapi validasi: Nominal DP tidak boleh 0/negatif dan tidak boleh melebihi total pesanan.
+  - Pada kartu meja aktif (`OCCUPIED`):
+    - Jika meja berstatus DP, ditampilkan badge kuning emas: `💰 Status Uang Muka (DP): Sisa tagihan wajib dilunasi saat pengantaran hidangan atau customer selesai makan`.
+    - Rincian biaya menampilkan: *Total Belanja Meja*, *- Uang Muka (DP) Masuk*, dan *Sisa Pelunasan Wajib*.
+    - Tombol pembayaran berubah dinamis menjadi: `[💳 PROSES PELUNASAN SISA MEJA]`.
+- **Modal Pelunasan Kasir Terkalkulasi Otomatis (`Kasir.jsx`)**:
+  - Di dalam modal pembayaran / pelunasan:
+    - Total belanja, nominal DP sebelumnya, dan *Sisa Yang Wajib Dilunasi* dihitung otomatis secara presisi: `remainingDue = Math.max(0, total - alreadyPaid)`.
+    - Pilihan nominal bayar otomatis mengacu pada `remainingDue` (bukan total awal).
+    - Preset tombol cepat (Uang Pas, 50k, 100k, dll.) menyesuaikan dengan `remainingDue`.
+    - Pembayaran QRIS otomatis bernilai pas sebesar `remainingDue`.
+    - Pembayaran SPLIT membagi sisa tagihan `remainingDue` ke Cash dan QRIS.
+- **Pencatatan Pembayaran Backend (`KasirController::processPayment`)**:
+  - Mengambil data pembayaran awal atau DP (`alreadyPaid = existingPayment ? existingPayment->jumlah_bayar : order->dp_amount`).
+  - Menghitung target sisa tagihan: `targetBill = max(0, order->total - alreadyPaid)`.
+  - Jika metode DP dan metode pelunasan berbeda (misal: DP via Cash, sisa via QRIS), metode pembayaran final otomatis dikonversi menjadi `SPLIT`.
+  - Mencatat riwayat koreksi: `Pelunasan Rp ... via ...`.
+  - Mengubah status pesanan menjadi `PAID` dan mengosongkan meja (`status = 'AVAILABLE'`).
+- **Tampilan Struk Pelanggan & Dapur (`Receipt.jsx`)**:
+  - **Struk Saat Transaksi DP**:
+    - Header berlabel: `💰 STRUK UANG MUKA (DP)`.
+    - Mencantumkan `Uang Muka Diterima (CASH/QRIS): Rp ...` dan baris merah tebal `SISA TAGIHAN (BELUM LUNAS): Rp ...`.
+  - **Struk Saat Pelunasan**:
+    - Mencantumkan `TOTAL: Rp ...`.
+    - Rincian pelunasan: `Uang Muka (DP) Sebelumnya: Rp ...` dan `Pelunasan Sisa: Rp ...`.
+    - Breakdown pembayaran Cash, QRIS, atau Split beserta nominal kembalian.
+
+### 3. Kompilasi & Paket Deployment Hosting:
+- Kompilasi seluruh aset frontend berhasil via `npm run build` (5.24s).
+- File arsip cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` telah diperbarui dengan file controller, model, migration, view blade, dan bundle aset `public/build/` terbaru.
+
+---
+
+## 16 Oktober 2026 (Fitur Pemisah Batch & Pilihan Cetak Tiket Dapur: Hanya Tambahan vs Semua Berpemisah)
+
+### 1. Latar Belakang & Permintaan Pengguna:
+- Pengguna melaporkan bahwa saat mencetak tiket dapur pada meja yang memiliki pesanan tambahan (*multiple batches*), seluruh hidangan tercetak bercampur aduk dalam satu daftar tanpa pemisah antara pesanan awal dan pesanan tambahan (seperti pada contoh No. Meja 30 yang memuat 4x hidangan Indomie tanpa tanda batch).
+- Pengguna meminta agar kasir bisa memilih apakah ingin mencetak **hanya menu tambahannya saja**, atau jika dicetak semua, harus dibuatkan **tanda pemisah batch yang sangat jelas** seperti yang ada di struk customer.
+
+### 2. Implementasi & Fitur Baru (`Receipt.jsx`):
+1. **Tanda Pemisah Batch Tegas & Kontras Tinggi (Persis Struk Customer)**:
+   - Jika tiket dapur mencetak semua menu pesanan dari meja yang memiliki pesanan tambahan, sistem mengelompokkannya secara teratur per batch:
+     - `▶ PESANAN AWAL (BATCH 1)` dengan latar abu-abu dan garis batas yang rapi.
+     - `⚡ PESANAN TAMBAHAN #1 (BATCH 2)` lengkap dengan badge mencolok `★ MENU TAMBAHAN (MASAK INI) ★` berlatar hitam blok tebal dan garis pemisah `border-t-4 border-black`.
+     - Juru masak dapur dijamin dapat langsung membedakan hidangan lama dan hidangan yang baru saja ditambahkan tamu tanpa salah paham.
+2. **Toolbar Seleksi Interaktif Pilihan Cetak Dapur (1-Click Switch)**:
+   - Di atas preview tiket dapur (hanya muncul di layar dan otomatis disembunyikan saat dicetak via CSS print `.no-print`), disediakan tombol seleksi cepat:
+     - `[⚡ Hanya Tambahan (X Item)]` (*Cetak menu baru saja*): Otomatis memfilter dan hanya mencetak hidangan tambahan terbaru dengan header `--- TICKET DAPUR (TAMBAHAN) ---` dan `★ HANYA MASAK MENU TAMBAHAN INI ★`.
+     - `[📋 Semua Pesanan]` (*Ada tanda pemisah awal & tambahan*): Mencetak seluruh menu meja dari batch awal hingga seluruh batch tambahan dengan pemisah kotak tebal.
+     - Tombol pemilih batch spesifik `[Batch 1 (Awal)]`, `[Batch 2 (Tambahan #1)]`, dst. jika meja memiliki lebih dari 2 batch.
+3. **Sinkronisasi Otomatis Kasir**:
+   - Saat kasir baru saja mengirim menu tambahan via tombol `[🍳 Kirim Menu Tambahan ke Dapur]`, sistem secara cerdas mengatur pilihan awal ke `[⚡ Hanya Tambahan]`.
+   - Kasir dapat berganti ke mode `[📋 Semua Pesanan]` hanya dengan 1 kali klik sebelum menekan Print.
+   - Pilihan ini bekerja seragam dan terintegrasi di seluruh layar: Layar Kasir (`/order`), Monitor Dapur (`/pos/monitor`), dan Laporan Penjualan (`/admin/pos-reports`).
+
+### 3. Kompilasi & Paket Deployment Hosting:
+- Kompilasi aset Vite sukses via `npm run build` (5.29s).
+- File arsip cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` telah diperbarui memuat file `Receipt.jsx` dan bundle aset `public/build/` terbaru.
+
+---
+
+## 16 Oktober 2026 (Fitur Validasi Wajib Isi Nama Pelanggan & Popup Peringatan di POS Kasir)
+
+### 1. Latar Belakang & Permintaan Pengguna:
+- Pengguna meminta agar bagian **Nama Pelanggan** pada sistem POS Kasir (`/order`) dibuat **wajib diisi (mandatory)**.
+- Sistem **tidak boleh** membiarkan nama pelanggan kosong atau menggunakan fallback default *"Pelanggan"*.
+- Jika kasir belum mengisi nama pelanggan saat hendak mengirim pesanan ke dapur, harus muncul pop-up peringatan interaktif yang memberitahukan bahwa nama pelanggan wajib diisi sebelum pesanan dapat diproses.
+
+### 2. Implementasi & Fitur Baru:
+1. **Frontend Interaktif & Popup Validasi SweetAlert2 (`Kasir.jsx`)**:
+   - Pada fungsi `handleSendOrder`, ditambahkan pengecekan ketat:
+     - Jika kolom nama pelanggan kosong, hanya spasi, atau bernilai *"pelanggan"* (case-insensitive), pesanan ditahan dan sistem langsung memunculkan dialog pop-up peringatan `Swal.fire`:
+       - **Judul**: *Nama Pelanggan Wajib Diisi!*
+       - **Pesan**: *Mohon masukkan Nama Pelanggan / Tamu Meja terlebih dahulu sebelum mengirim pesanan ke dapur. Aturan: Nama tidak boleh dikosongkan dan tidak boleh hanya diisi kata "Pelanggan".*
+       - **Tombol**: *[✍️ Isi Nama Pelanggan Sekarang]*
+     - Saat kasir menekan tombol pop-up, sistem secara otomatis melakukan auto-focus kursor (`inputEl.focus()`) dan *smooth scroll* langsung ke kotak input nama pelanggan.
+     - Tambahan validasi panjang nama minimal 2 karakter untuk mencegah salah ketik simbol atau huruf tunggal.
+2. **Indikator Visual & Styling Input Nama di Keranjang Kasir**:
+   - Label diubah menjadi: `Nama Customer / Pemesan: * (Wajib Diisi)` dengan aksen teks merah tegas.
+   - Dilengkapi badge penanda merah `Wajib diisi` di sisi kanan label jika kolom masih kosong.
+   - Kotak input memiliki penanda border kuning/amber `border-amber-400 bg-amber-50/40` serta pesan bantuan saat belum diisi, dan kembali hijau rapi saat nama telah diinput.
+3. **Validasi Kuat di Sisi Backend (`KasirController.php`)**:
+   - Pada metode `storeOrder`, aturan validasi diubah:
+     `'nama_pelanggan' => 'required|string|min:2|max:100'`
+   - Menambahkan pesan error bahasa Indonesia kustom:
+     - `'nama_pelanggan.required' => 'Nama pelanggan wajib diisi!'`
+     - `'nama_pelanggan.min' => 'Nama pelanggan minimal 2 karakter!'`
+   - Ditambahkan server-side guard `strcasecmp($namaPelanggan, 'Pelanggan') === 0` untuk menolak transaksi bila kasir memaksakan kata *"Pelanggan"*.
+   - Nilai nama pelanggan disimpan bersih menggunakan `trim()`, tanpa lagi menggunakan fallback kata `"Pelanggan"`.
+4. **Pembaruan Panduan In-App & Buku Panduan Kasir**:
+   - Memperbarui komponen `CashierGuideModal.jsx` (Langkah 3) menjadi *"Isi Nama Pelanggan (Wajib Diisi) & Catatan Masakan"*.
+   - Memperbarui berkas dokumentasi `docs/BUKU_PANDUAN_KASIR_POS_PALANTEA.md` (BAB 5 Langkah 2).
+
+### 3. Kompilasi & Paket Deployment Hosting:
+- Kompilasi aset Vite berhasil 100% tanpa error via `npm run build` (5.29s).
+- File arsip hosting cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` telah diperbarui dengan file controller, modal panduan, script kasir, dan bundle aset `public/build/` terbaru.
+
+---
+
+## 15 Oktober 2026 (Fitur Filter Kategori Menu Makanan / Minuman / Snack & Toggle Cepat Status di Kelola Menu POS)
+
+### 1. Latar Belakang & Permintaan Pengguna:
+- Pengguna meminta agar halaman Kelola Menu Makanan (`/admin/pos-foods`) memiliki fitur filter per-kategori (Minuman, Makanan, Snack, dll.) seperti yang ada pada layar POS Kasir utama (`/order`), agar mempermudah kasir dan admin dalam memeriksa ketersediaan menu per kelompok hidangan.
+- Sebelumnya, halaman hanya memiliki kolom pencarian teks tanpa filter kategori tombol/tab, dan daftar menu hanya terpaginasi 15 item tanpa navigasi halaman pagination yang terlihat.
+
+### 2. Implementasi & Fitur Baru:
+1. **Category Filter Tabs / Pills (Persis Standar POS Kasir)**:
+   - Dibuatkan bar tab kategori horizontal di bagian atas tabel:
+     - Tombol `[🍽️ Semua Menu]` dengan badge jumlah total seluruh menu.
+     - Tombol untuk masing-masing kategori dinamis dari database: `[Minuman]`, `[Makanan]`, `[Snack]`, `[Coffee]`, dll., lengkap dengan badge counter jumlah menu di kategori tersebut (`withCount('foods')`).
+     - Indikator aktif berwarna hijau emerald (`bg-green-600 text-white font-black shadow-xs`) dan saat diklik langsung menyaring daftar menu secara instan tanpa me-reload seluruh halaman (`preserveState`, `preserveScroll`).
+2. **Fast Status Toggle 1-Klik (Habis / Tersedia)**:
+   - Pada kolom **Status** di tabel, badge diubah menjadi tombol interaktif dengan dot indikator hijau/merah.
+   - Kasir/admin dapat mengubah status menu dari `Aktif` ke `Tidak Aktif` (Habis / Sold Out) atau sebaliknya hanya dengan **1 kali klik langsung dari tabel** tanpa harus membuka modal edit form.
+   - Endpoint backend baru ditambahkan: `POST /admin/pos-foods/{id}/toggle-status` (`AdminFoodController::toggleStatus`).
+3. **Penyempurnaan Pencarian & Kontrol Tabel**:
+   - Kolom pencarian teks terintegrasi mulus dengan filter kategori yang sedang aktif, dilengkapi tombol bersihkan pencarian `(X)`.
+   - Filter dropdown status ketersediaan: `[Semua Status]`, `[🟢 Aktif (Tersedia)]`, `[🔴 Tidak Aktif (Habis)]`.
+   - Pemilih jumlah baris data per halaman: 15, 25, 50, atau 100 menu.
+4. **Navigasi Pagination Lengkap**:
+   - Menambahkan footer pagination di bawah tabel dengan keterangan `Menampilkan X - Y dari Z menu` dan tombol tautan halaman (Previous, 1, 2, 3, Next) via Inertia `Link`.
+5. **Tombol Panduan Menu In-App**:
+   - Menambahkan tombol `[📖 Panduan Menu]` di header atas halaman yang langsung membuka modal panduan operasional POS tab menu & kategori (`CashierGuideModal`).
+
+### 3. Kompilasi & Paket Deployment Hosting:
+- Kompilasi aset sukses 100% via `npm run build` (23.67s).
+- File arsip cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` telah diperbarui dengan file controller, route, file tampilan JSX, dan bundle aset `public/build/` terbaru.
+
+---
+
+## 15 Oktober 2026 (Fix Header Subtotal Batch Pesanan Tambahan Rp 0 di Struk Customer)
+
+### 1. Investigasi & Solusi Masalah Subtotal Rp 0:
+- **Gejala Masalah**:
+  - Pada popup Cetak Struk Customer untuk pesanan meja dengan beberapa kali penambahan menu (*multiple batches*), salah satu header kelompok pesanan tambahan (misal: `▶ PESANAN TAMBAHAN #3`) tercetak `RP 0`, padahal di bawahnya tertera daftar menu lengkap dengan harga masing-masing (seperti Nasi Goreng Pattaya Rp 24.000, Mie Goreng Ayam Barendo Rp 28.000, Nugget Ayam Rp 18.000, Matcha Ice Rp 17.000, Air Mineral Rp 5.000 = Total Rp 92.000), kelompok pesanan tambahan lainnya normal (misal Tambahan #2 Rp 54.000, Tambahan #4 Rp 57.000), dan total akhir di bagian bawah struk sudah benar.
+- **Penyebab**:
+  - Pada berkas `resources/js/Pages/POS/Receipt.jsx`, perhitungan subtotal per-batch menggunakan rumus:
+    `const bSubtotal = bItems.filter(i => i.status !== 'CANCELLED').reduce((s, i) => s + (Number(i.subtotal) || 0), 0);`
+  - Jika item-item pada batch tersebut memiliki penanda status non-aktif/CANCELLED (misal akibat pengujian fitur pembatalan menu sebelumnya atau kegagalan mapping status), fungsi `filter(i => i.status !== 'CANCELLED')` menghasilkan array kosong `[]`, sehingga nilai `bSubtotal` terevaluasi menjadi `0` (`RP 0`).
+  - Sementara itu, pada pemetaan daftar item di bawahnya (`bItems.map`), seluruh item tetap dirender beserta harga satuannya tanpa penanda pembatalan. Akibatnya timbul diskrepansi visual membingungkan di mana header bertuliskan `RP 0` namun di bawahnya tercantum deretan menu dengan harga puluhan ribu rupiah.
+- **Tindakan Perbaikan**:
+  - **Perhitungan Subtotal Cerdas & Tangguh (Smart Fallback)**:
+    - Diperbarui menjadi:
+      ```javascript
+      const activeItems = bItems.filter(i => i.status !== 'CANCELLED');
+      const itemsToSum = activeItems.length > 0 ? activeItems : bItems;
+      const bSubtotal = itemsToSum.reduce((s, i) => {
+        const price = Number(i.subtotal) || (Number(i.harga_satuan || 0) * Number(i.jumlah || 1)) || 0;
+        return s + price;
+      }, 0);
+      ```
+      Sehingga bila seluruh menu pada batch tersebut tercantum di struk, subtotal kelompok selalu menjumlahkan nominal menu di bawahnya dan tidak akan pernah bernilai Rp 0.
+    - Menambahkan kalkulasi fallback harga `(Number(i.harga_satuan || 0) * Number(i.jumlah || 1))` guna mencegah nilai subtotal `NaN`/`0` jika data `subtotal` tidak terbaca.
+  - **Penanda Visual Pembatalan (Jika Ada Item Dibatalkan)**:
+    - Jika dalam suatu batch terdapat item yang dibatalkan sementara item lainnya aktif (`activeItems.length > 0`), menu yang dibatalkan akan diberi penanda teks `(BATAL)` berwarna merah serta harga dicoret (*line-through*), sehingga pelanggan dan kasir memahami mengapa item tersebut tidak dimasukkan ke dalam subtotal kelompok.
+  - **Kompilasi & Paket Deployment**:
+    - Berhasil dikompilasi via `npm run build` (28.72s).
+    - Paket deployment cPanel `d:\PA\CPH_Update_Kantin_September_2026.zip` diperbarui memuat file `Receipt.jsx` dan bundle aset `public/build/` terbaru.
+
+---
+
 ## 15 Oktober 2026 (Fix Error: Class "App\Http\Controllers\Pos\PosTable" not found di PosReportController)
 
 ### 1. Investigasi & Solusi Error:

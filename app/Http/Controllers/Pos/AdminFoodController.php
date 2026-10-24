@@ -32,23 +32,37 @@ class AdminFoodController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        $query = PosFood::with('category')->latest();
+        $query = PosFood::with('category')->orderBy('nama', 'asc');
 
-        if ($request->has('search') && $request->search != '') {
+        if ($request->filled('search')) {
             $query->where('nama', 'like', '%' . $request->search . '%');
         }
 
-        if ($request->has('category') && $request->category != '') {
+        if ($request->filled('category') && $request->category !== 'all') {
             $query->where('category_id', $request->category);
         }
 
-        $foods = $query->paginate(15)->withQueryString();
-        $categories = PosFoodCategory::orderBy('nama_kategori', 'asc')->get();
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        $perPage = (int) $request->input('per_page', 25);
+        if ($perPage <= 0 || $perPage > 200) $perPage = 25;
+
+        $foods = $query->paginate($perPage)->withQueryString();
+        $categories = PosFoodCategory::withCount('foods')->orderBy('nama_kategori', 'asc')->get();
+        $totalFoodsCount = PosFood::count();
 
         return Inertia::render('POS/Admin/FoodIndex', [
             'foods' => $foods,
             'categories' => $categories,
-            'filters' => $request->only(['search', 'category']),
+            'totalFoodsCount' => $totalFoodsCount,
+            'filters' => [
+                'search' => $request->search ?? '',
+                'category' => $request->category ?? 'all',
+                'status' => $request->status ?? 'all',
+                'per_page' => $perPage,
+            ],
         ]);
     }
 
@@ -119,6 +133,19 @@ class AdminFoodController extends Controller
         $food->update($data);
 
         return back()->with('success', 'Menu makanan berhasil diperbarui!');
+    }
+
+    /**
+     * Toggle Cepat Status Food (Aktif / Tidak Aktif / Habis)
+     */
+    public function toggleStatus($id)
+    {
+        $food = PosFood::findOrFail($id);
+        $food->status = ($food->status === 'Aktif') ? 'Tidak Aktif' : 'Aktif';
+        $food->save();
+
+        $statusText = $food->status === 'Aktif' ? 'Aktif (Dapat Dipesan)' : 'Tidak Aktif (Habis/Sold Out)';
+        return back()->with('success', 'Status menu "' . $food->nama . '" diubah menjadi ' . $statusText . '!');
     }
 
     /**

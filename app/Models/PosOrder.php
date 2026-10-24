@@ -22,6 +22,7 @@ class PosOrder extends Model
         'subtotal',
         'diskon',
         'total',
+        'dp_amount',
         'catatan',
     ];
 

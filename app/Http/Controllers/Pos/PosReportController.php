@@ -533,10 +533,44 @@ class PosReportController extends Controller
             ])
             ->toArray();
 
+        // Rekapitulasi ringkasan penjualan (Omzet, Cash, QRIS, Transaksi)
+        $totalRevenue = (int) $orders->sum('total');
+        $totalTransactions = $orders->count();
+        $totalCash = 0;
+        $totalQris = 0;
+        foreach ($orders as $o) {
+            if ($o->payment) {
+                if ($o->payment->cash_amount > 0 || $o->payment->qris_amount > 0) {
+                    $totalCash += (int) $o->payment->cash_amount;
+                    $totalQris += (int) $o->payment->qris_amount;
+                } else {
+                    $m = strtoupper($o->payment->metode_pembayaran ?: ($o->metode_pembayaran ?: 'Cash'));
+                    if ($m === 'QRIS') {
+                        $totalQris += (int) $o->total;
+                    } else {
+                        $totalCash += (int) $o->total;
+                    }
+                }
+            } else {
+                $m = strtoupper($o->metode_pembayaran ?: 'Cash');
+                if ($m === 'QRIS') {
+                    $totalQris += (int) $o->total;
+                } else {
+                    $totalCash += (int) $o->total;
+                }
+            }
+        }
+
         return $this->handleExport($format, $data, 'laporan_penjualan_kantin', [
             'title' => 'LAPORAN PENJUALAN KANTIN PALANTEA',
             'period' => "Periode: " . $startDate->format('d/m/Y') . " s/d " . $endDate->format('d/m/Y'),
             'topProducts' => $topFoods,
+            'summary' => [
+                'total_omzet' => $totalRevenue,
+                'total_cash' => $totalCash,
+                'total_qris' => $totalQris,
+                'total_transaksi' => $totalTransactions,
+            ],
         ]);
     }
 
@@ -653,13 +687,19 @@ class PosReportController extends Controller
             if (!\Illuminate\Support\Facades\Schema::hasColumn('pos_order_items', 'batch_no')) {
                 \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_order_items ADD COLUMN batch_no INT NOT NULL DEFAULT 1");
             }
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'dp_amount')) {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_orders ADD COLUMN dp_amount INT NOT NULL DEFAULT 0");
+            }
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE pos_orders MODIFY COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'UNPAID'");
+            } catch (\Throwable $e) {}
         } catch (\Exception $e) {
             // Ignore jika sudah ada
         }
     }
 
     /**
-     * Update data pesanan, metode pembayaran, nominal Cash/QRIS, kembalian, nama pelanggan, meja, dan catatan koreksi
+     * Update data pesanan, metode pembayaran, nominal Cash/QRIS, kembalian, nama pelanggan, meja, total tagihan, dan catatan koreksi
      */
     public function updatePaymentNote(Request $request, $id)
     {
@@ -673,6 +713,8 @@ class PosReportController extends Controller
             'catatan_koreksi' => 'nullable|string|max:500',
             'nama_pelanggan' => 'nullable|string|max:100',
             'table_id' => 'nullable|exists:pos_tables,id',
+            'total' => 'nullable|integer|min:0',
+            'payment_status' => 'nullable|string',
         ]);
 
         try {
@@ -680,6 +722,14 @@ class PosReportController extends Controller
 
             $order = PosOrder::with('payment')->where('id', $id)->firstOrFail();
             $payment = $order->payment;
+
+            if ($request->has('total') && $request->total !== null) {
+                $order->total = (int) $request->total;
+            }
+            if ($request->filled('payment_status')) {
+                $order->payment_status = $request->payment_status;
+            }
+
             $orderTotal = (int) $order->total;
 
             if ($request->filled('nama_pelanggan')) {
@@ -761,7 +811,11 @@ class PosReportController extends Controller
 
             // Sinkronkan ke PosOrder
             $order->metode_pembayaran = $newMethod;
-            $order->payment_status = 'PAID';
+            if ($request->filled('payment_status')) {
+                $order->payment_status = $request->payment_status;
+            } elseif ($order->payment_status !== 'DP') {
+                $order->payment_status = 'PAID';
+            }
             $order->save();
 
             DB::commit();

@@ -200,9 +200,11 @@ Route::middleware(['auth', 'pos.access'])->group(function () {
     Route::post('/pos/payment', [KasirController::class, 'processPayment'])->name('pos.payment.process');
     Route::post('/pos/order/{id}/complete', [KasirController::class, 'completeOrder'])->name('pos.order.complete');
     Route::post('/pos/order/{id}/cancel', [KasirController::class, 'cancelOrder'])->name('pos.order.cancel');
+    Route::post('/pos/order/{id}/update-total', [KasirController::class, 'updateOrderTotal'])->name('pos.order.update-total');
     Route::post('/pos/order/{id}/add-items', [KasirController::class, 'addItemsToOrder'])->name('pos.order.add-items');
     Route::post('/pos/order-item/{id}/toggle-served', [KasirController::class, 'toggleOrderItemServed'])->name('pos.order-item.toggle-served');
     Route::post('/pos/order-item/{id}/cancel', [KasirController::class, 'cancelOrderItem'])->name('pos.order-item.cancel');
+    Route::post('/pos/orders/cleanup-stale', [KasirController::class, 'cleanupStaleOrders'])->name('pos.orders.cleanup-stale');
     Route::post('/pos/table/{id}/reset', [KasirController::class, 'resetTable'])->name('pos.table.reset');
     Route::get('/pos/json-state', [KasirController::class, 'jsonState'])->name('pos.json.state');
 
@@ -211,6 +213,7 @@ Route::middleware(['auth', 'pos.access'])->group(function () {
         Route::get('/pos-foods', [AdminFoodController::class, 'index'])->name('admin.pos.foods.index');
         Route::post('/pos-foods', [AdminFoodController::class, 'store'])->name('admin.pos.foods.store');
         Route::post('/pos-foods/{id}/update', [AdminFoodController::class, 'update'])->name('admin.pos.foods.update');
+        Route::post('/pos-foods/{id}/toggle-status', [AdminFoodController::class, 'toggleStatus'])->name('admin.pos.foods.toggle-status');
         Route::post('/pos-foods/{id}/delete', [AdminFoodController::class, 'destroy'])->name('admin.pos.foods.delete');
         Route::post('/pos-food-categories', [AdminFoodController::class, 'storeCategory'])->name('admin.pos.food-categories.store');
 

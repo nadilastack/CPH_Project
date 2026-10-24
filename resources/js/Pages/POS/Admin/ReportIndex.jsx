@@ -81,6 +81,8 @@ export default function ReportIndex({
   const [editingOrder, setEditingOrder] = useState(null);
   const [editCustomerName, setEditCustomerName] = useState('');
   const [editTableId, setEditTableId] = useState('');
+  const [editOrderTotal, setEditOrderTotal] = useState('');
+  const [editPaymentStatus, setEditPaymentStatus] = useState('PAID');
   const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
   const [editCashAmount, setEditCashAmount] = useState('');
   const [editQrisAmount, setEditQrisAmount] = useState('');
@@ -240,6 +242,8 @@ export default function ReportIndex({
   const handleOpenEditModal = (order) => {
     setEditingOrder(order);
     const currMethod = order.payment?.metode_pembayaran || order.metode_pembayaran || (order.payment_status === 'UNPAID' ? 'QRIS' : 'Cash');
+    setEditOrderTotal((order.total || 0).toString());
+    setEditPaymentStatus(order.payment_status || 'PAID');
     setEditPaymentMethod(currMethod);
     setEditCashAmount((order.payment?.cash_amount ?? (currMethod === 'Cash' ? order.total : 0)).toString());
     setEditQrisAmount((order.payment?.qris_amount ?? (currMethod === 'QRIS' ? order.total : 0)).toString());
@@ -255,15 +259,19 @@ export default function ReportIndex({
     if (!editingOrder) return;
     setIsSubmittingNote(true);
 
+    const currentTot = parseInt(editOrderTotal) || editingOrder.total;
+
     const cashVal = editPaymentMethod === 'Cash'
-      ? (parseInt(editCashAmount) || editingOrder.total)
+      ? (parseInt(editCashAmount) || currentTot)
       : (editPaymentMethod === 'SPLIT' ? (parseInt(editCashAmount) || 0) : 0);
 
     const qrisVal = editPaymentMethod === 'QRIS'
-      ? (parseInt(editQrisAmount) || editingOrder.total)
+      ? (parseInt(editQrisAmount) || currentTot)
       : (editPaymentMethod === 'SPLIT' ? (parseInt(editQrisAmount) || 0) : 0);
 
     router.post(route('admin.pos.reports.payment.update-note', editingOrder.id), {
+      total: currentTot,
+      payment_status: editPaymentStatus,
       metode_pembayaran: editPaymentMethod,
       cash_amount: cashVal,
       qris_amount: qrisVal,
@@ -956,6 +964,53 @@ export default function ReportIndex({
                 </div>
               </div>
 
+              {/* Edit Total Tagihan & Status Pembayaran */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Total Tagihan Pesanan (Rp):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editOrderTotal}
+                    onChange={(e) => {
+                      const newTot = e.target.value;
+                      setEditOrderTotal(newTot);
+                      const totNum = parseInt(newTot) || 0;
+                      if (editPaymentMethod === 'Cash') {
+                        setEditCashAmount(totNum.toString());
+                      } else if (editPaymentMethod === 'QRIS') {
+                        setEditQrisAmount(totNum.toString());
+                      } else if (editPaymentMethod === 'SPLIT') {
+                        const half = Math.floor(totNum / 2);
+                        setEditCashAmount(half.toString());
+                        setEditQrisAmount((totNum - half).toString());
+                      }
+                    }}
+                    placeholder="Contoh: 100000"
+                    className="w-full px-3 py-2 border border-green-300 rounded-xl text-xs font-black text-green-800 focus:ring-2 focus:ring-amber-500 bg-green-50/50"
+                  />
+                  <span className="text-[10px] text-gray-500 mt-0.5 block">
+                    Bisa diubah jika ada DP/koreksi harga item.
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Status Pembayaran:
+                  </label>
+                  <select
+                    value={editPaymentStatus}
+                    onChange={(e) => setEditPaymentStatus(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:ring-2 focus:ring-amber-500 bg-white"
+                  >
+                    <option value="PAID">🟢 PAID (Lunas)</option>
+                    <option value="DP">🟡 DP (Uang Muka)</option>
+                    <option value="UNPAID">🔴 UNPAID (Belum Bayar)</option>
+                  </select>
+                </div>
+              </div>
+
               {/* Edit Customer Name & Table */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1004,16 +1059,17 @@ export default function ReportIndex({
                       type="button"
                       onClick={() => {
                         setEditPaymentMethod(m.id);
+                        const currTotal = parseInt(editOrderTotal) || editingOrder.total;
                         if (m.id === 'QRIS') {
-                          setEditQrisAmount(editingOrder.total.toString());
+                          setEditQrisAmount(currTotal.toString());
                           setEditCashAmount('0');
                         } else if (m.id === 'Cash') {
-                          setEditCashAmount(editingOrder.total.toString());
+                          setEditCashAmount(currTotal.toString());
                           setEditQrisAmount('0');
                         } else if (m.id === 'SPLIT') {
-                          const half = Math.floor(editingOrder.total / 2);
+                          const half = Math.floor(currTotal / 2);
                           setEditCashAmount(half.toString());
-                          setEditQrisAmount((editingOrder.total - half).toString());
+                          setEditQrisAmount((currTotal - half).toString());
                         }
                       }}
                       className={`py-2 rounded-xl text-xs font-black transition-all ${
@@ -1053,7 +1109,7 @@ export default function ReportIndex({
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1 text-xs text-blue-900">
                   <div className="flex justify-between items-center font-bold">
                     <span>Nominal Transfer QRIS:</span>
-                    <span className="font-black text-sm text-blue-800">{formatRp(parseInt(editQrisAmount) || editingOrder.total)}</span>
+                    <span className="font-black text-sm text-blue-800">{formatRp(parseInt(editQrisAmount) || (parseInt(editOrderTotal) || editingOrder.total))}</span>
                   </div>
                   <p className="text-[11px] text-blue-700 leading-relaxed">
                     📱 Transaksi ini akan tercatat ke mutasi non-tunai QRIS.
