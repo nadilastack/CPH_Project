@@ -24,33 +24,33 @@ export default function Login({ status, canResetPassword }) {
                 setData((prev) => ({
                     ...prev,
                     email: 'centralpalantea@gmail.com',
-                    password: 'AdminCPH24@',
+                    password: '',
                     remember: true,
-                    showPassword: true,
+                    showPassword: false,
                 }));
             } else if (role === 'kasir') {
                 setData((prev) => ({
                     ...prev,
                     email: 'kasir@cph.com',
-                    password: 'KasirCPH24@',
+                    password: '',
                     remember: true,
-                    showPassword: true,
+                    showPassword: false,
                 }));
             } else if (role === 'dapur') {
                 setData((prev) => ({
                     ...prev,
                     email: 'dapur@cph.com',
-                    password: 'DapurCPH24@',
+                    password: '',
                     remember: true,
-                    showPassword: true,
+                    showPassword: false,
                 }));
             } else if (role === 'customer') {
                 setData((prev) => ({
                     ...prev,
                     email: 'testing@cph.com',
-                    password: 'Testing123!',
+                    password: '',
                     remember: true,
-                    showPassword: true,
+                    showPassword: false,
                 }));
             }
         }
@@ -62,33 +62,33 @@ export default function Login({ status, canResetPassword }) {
             setData((prev) => ({
                 ...prev,
                 email: 'centralpalantea@gmail.com',
-                password: 'AdminCPH24@',
+                password: '',
                 remember: true,
-                showPassword: true,
+                showPassword: false,
             }));
         } else if (role === 'kasir') {
             setData((prev) => ({
                 ...prev,
                 email: 'kasir@cph.com',
-                password: 'KasirCPH24@',
+                password: '',
                 remember: true,
-                showPassword: true,
+                showPassword: false,
             }));
         } else if (role === 'dapur') {
             setData((prev) => ({
                 ...prev,
                 email: 'dapur@cph.com',
-                password: 'DapurCPH24@',
+                password: '',
                 remember: true,
-                showPassword: true,
+                showPassword: false,
             }));
         } else if (role === 'customer') {
             setData((prev) => ({
                 ...prev,
                 email: 'testing@cph.com',
-                password: 'Testing123!',
+                password: '',
                 remember: true,
-                showPassword: true,
+                showPassword: false,
             }));
         }
     };
@@ -120,7 +120,7 @@ export default function Login({ status, canResetPassword }) {
                 {/* Quick Auto-Fill Role Buttons (4 Roles) */}
                 <div className="mb-5 bg-gradient-to-r from-gray-50 to-green-50/40 border border-gray-200 rounded-xl p-3 shadow-inner">
                     <p className="text-[11px] font-bold text-gray-600 mb-2 text-center uppercase tracking-wider flex items-center justify-center gap-1">
-                        <span>⚡</span> Masuk Cepat 1-Klik (Auto-Fill)
+                        <span>⚡</span> Pilih Cepat Akun (Auto-Fill Email)
                     </p>
                     <div className="grid grid-cols-4 gap-1.5">
                         <button

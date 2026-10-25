@@ -1,5 +1,169 @@
 # Catatan Perubahan
 
+## 25 Oktober 2026 (Pembersihan Kredensial & Secrets Sensitif untuk Keamanan GitHub & Hosting)
+
+### 1. Latar Belakang & Analisis Insiden GitGuardian
+- **Masalah**:
+  - GitGuardian mendeteksi ekspos rahasia/kredensial pada repository `nadilastack/CPH_Project` setelah commit sebelumnya:
+    1. `Generic Password` & `Company Email Password` di `resources/js/Pages/Auth/Login.jsx` (2 password admin & kasir/dapur serta email perusahaan yang di-hardcode pada tombol auto-fill).
+    2. `JSON Web Token` di `config/biteship.php` (API Key Biteship test berupa JWT token yang dijadikan nilai fallback langsung di file config).
+    3. `Generic High Entropy Secret` di `.env.example` (API Key RajaOngkir/Komerce yang tertulis di contoh file env).
+- **Tujuan**:
+  - Menghapus seluruh kata sandi dan token rahasia dari codebase agar aman untuk diunggah ulang ke GitHub dan siap dideploy ke server hosting.
+
+### 2. Tindakan Pembersihan & Perbaikan
+- **`resources/js/Pages/Auth/Login.jsx`**:
+  - Menghapus seluruh kata sandi hardcoded (`AdminCPH24@`, `KasirCPH24@`, `DapurCPH24@`, `Testing123!`).
+  - Mengubah fungsi auto-fill / shortcut tombol role menjadi **"⚡ Pilih Cepat Akun (Auto-Fill Email)"** yang hanya mengisi email saja (`email: '...'`, `password: ''`), sehingga pengguna mengetikkan kata sandi sendiri dengan aman tanpa membocorkan kredensial apa pun ke git repository.
+- **`config/biteship.php`**:
+  - Menghapus hardcoded Biteship JWT token fallback dari file konfigurasi:
+    `'api_key' => env('BITESHIP_API_KEY', '')`.
+  - Memindahkan nilai API key ke `.env` lokal (yang terabaikan oleh `.gitignore`).
+- **`.env.example`**:
+  - Mengosongkan kredensial sensitif:
+    `RAJAONGKIR_API_KEY=`
+    `RAJAONGKIR_ORIGIN_CITY_ID=`
+- **Build Aset Frontend & Cleanup**:
+  - Menghapus file build lama di `public/build/assets/` yang masih memuat string password lama.
+  - Menjalankan ulang `npm run build` sehingga seluruh bundle frontend bersih dari string kata sandi dan secrets.
+- **Paket Update Hosting**:
+  - Menjalankan script `make_update_zip.ps1` untuk meregenerasi paket arsip update cPanel `CPH_Update_Kantin_September_2026.zip` yang sudah bersih dan siap diunggah ke cPanel Jagoan Hosting.
+
+
+## 25 Oktober 2026 (Fitur Koreksi & Pembatalan Item / Batch Pesanan yang Sudah Selesai di Laporan Penjualan)
+
+### 1. Fasilitas Koreksi Pesanan yang Sudah Selesai (Meja Sudah Kosong)
+- **Akar Masalah**:
+  - Ketika pesanan sudah selesai / lunas (meja sudah dikosongkan), pesanan tersebut tidak lagi muncul sebagai meja aktif di halaman Kasir. Akibatnya, tombol `Batalkan Menu` per-item di Kasir tidak dapat diakses lagi.
+  - Saat kasir/admin membuka modal **"Ubah Metode Bayar & Koreksi Kasir"** di Laporan Penjualan (`ReportIndex.jsx`), sebelumnya hanya tersedia input angka `Total Tagihan Pesanan (Rp)`. Rincian menu makanan, daftar batch, dan tombol batalkan item belum tersedia di modal tersebut.
+  - Selain itu, nominal QRIS dan kembalian tunai terkunci pada data lama (misal: QRIS Rp 1.290.000 dan Kembalian Rp 539.000), sehingga membingungkan kasir/admin saat ingin mengoreksi pesanan yang terkena duplikasi batch.
+
+### 2. Implementasi Rincian Menu & Pembatalan 1-Klik di Modal Laporan
+- **Frontend Laporan Penjualan (`ReportIndex.jsx`)**:
+  - **Panel Rincian Menu Per-Batch**: Di dalam modal koreksi transaksi, kini ditampilkan seluruh daftar menu yang dikelompokkan rapi per batch:
+    - `▶ PESANAN AWAL (BATCH #1)`
+    - `▶ PESANAN TAMBAHAN #1 (BATCH #2)`
+    - `▶ PESANAN TAMBAHAN #2 (BATCH #3)`
+    - `▶ PESANAN TAMBAHAN #3 (BATCH #4)`
+  - **Tombol Batalkan Batch 1-Klik**: Pada setiap batch tambahan, tersedia tombol merah **`[ 🗑️ Batal Batch Ini ]`**. Sekali klik, seluruh item pada batch duplikat tersebut langsung dibatalkan, tagihan dipotong otomatis, dan nominal input tersinkronisasi seketika.
+  - **Tombol Batalkan Menu Satuan**: Setiap item memiliki tombol hapus tersendiri jika kasir hanya ingin membatalkan menu tertentu.
+  - **Sinkronisasi Nominal QRIS & Kembalian**:
+    - Nominal QRIS otomatis mengikuti total tagihan yang baru.
+    - Disediakan tombol **`[ Reset Kembalian ke Rp 0 ]`** agar kembalian lama tidak membingungkan kasir saat pesanan non-tunai.
+- **Backend API & Sinkronisasi Pembayaran (`KasirController.php` & `routes/web.php`)**:
+  - Menambahkan endpoint dan method baru: `POST /pos/order/{id}/cancel-batch/{batchNo}` (`KasirController::cancelBatch`).
+  - Memperbarui `cancelOrderItem` dan `cancelBatch` agar secara otomatis menyinkronkan data pembayaran pada tabel `pos_payments` (`jumlah_bayar`, `qris_amount`, `cash_amount`, `kembalian`), sehingga laporan omzet dan mutasi kas/QRIS tetap 100% akurat.
+
+### 3. Redesain Modal Koreksi: Tata Letak 2-Kolom Melebar & Anti-Kepotong
+- **Masalah Visual**:
+  - Modal koreksi sebelumnya menggunakan tata letak 1 kolom sempit (`max-w-md`), sehingga seluruh elemen menumpuk ke bawah (vertikal memanjang).
+  - Pada layar laptop/desktop, tinggi modal melebihi tinggi layar sehingga terpotong di bagian atas (header tertutup) dan bagian bawah (tombol simpan/batal terdorong ke luar layar), sementara sisi kiri dan kanan layar masih menyisakan ruang kosong yang sangat lebar.
+- **Penyempurnaan UI/UX (`ReportIndex.jsx`)**:
+  - **Grid 2-Kolom Responsif (`max-w-4xl w-full`)**: Memanfaatkan ruang lebar layar monitor desktop/laptop secara optimal:
+    - **Kolom Kiri**: Menampilkan Ringkasan Tagihan Saat Ini & Panel Rincian Menu Pesanan Per-Batch dengan tombol `[ 🗑️ Batal Batch Ini ]` dan tombol hapus per-item.
+    - **Kolom Kanan**: Menampilkan Formulir Koreksi Total Tagihan, Status Pembayaran, Nama Pelanggan, Nomor Meja, Pilihan Metode Bayar Baru (Cash/QRIS/SPLIT), Rincian Nominal, Kembalian, dan Catatan Koreksi.
+  - **Pinned Header & Pinned Footer (`shrink-0`)**:
+    - Header judul modal dan tombol close `X` selalu terkunci rapi di bagian atas.
+    - Footer tombol aksi `[ Batal ]` dan `[ 💾 Simpan Perubahan ]` selalu terkunci di bagian bawah dan tidak akan pernah terpotong.
+    - Area konten tengah dapat di-scroll secara independen (`overflow-y-auto max-h-[92vh]`).
+
+### 4. Fitur Baru: Pulihkan Menu / Batch yang Dibatalkan (Restore / Un-Cancel 1-Klik)
+- **Latar Belakang**:
+  - Pengguna menguji tombol pembatalan menu pada pesanan yang sudah selesai (contoh: 2x Pempek Palantea Rp 60.000). Menu berhasil dibatalkan dan tagihan berkurang dari Rp 580.000 menjadi Rp 520.000.
+  - Namun kasir/admin membutuhkan fasilitas untuk memulihkan kembali menu yang terlanjur dibatalkan jika terjadi salah klik atau jika pembatalan hanya untuk uji coba.
+- **Implementasi Fitur (`ReportIndex.jsx`, `KasirController.php`, `routes/web.php`)**:
+  - **Tombol Hijau `[ 🔄 Pulihkan ]`**: Pada setiap menu yang berstatus `(DIBATALKAN)`, kini disediakan tombol `[ 🔄 Pulihkan ]`. Sekali klik, item langsung kembali aktif (`ACTIVE`), tagihan bertambah kembali sesuai harga menu (+ Rp 60.000 menjadi Rp 580.000), dan nominal pembayaran otomatis tersinkronisasi.
+  - **Tombol Hijau `[ 🔄 Pulihkan Batch ]`**: Disediakan tombol untuk memulihkan seluruh menu pada batch yang kosong/dibatalkan dengan 1 klik.
+  - **Backend Endpoint**:
+    - `POST /pos/order-item/{id}/restore` (`KasirController::restoreOrderItem`).
+    - `POST /pos/order/{id}/restore-batch/{batchNo}` (`KasirController::restoreBatch`).
+
+---
+
+## 25 Oktober 2026 (Pencegahan Duplikasi Batch Pesanan Tambahan & Anti Double-Submit)
+
+### 1. Eliminasi Duplikasi Pesanan Tambahan (Bug Batch Berulang)
+- **Akar Masalah**:
+  - Pengguna melaporkan bahwa saat menambahkan pesanan (misal: 1 Nasi Ramas Dendeng Cabe Hijau, 1 Nasi Ayam Barendo Palantea senilai Rp 53.000), sistem tiba-tiba menghasilkan 4 batch tambahan (`PESANAN TAMBAHAN #1`, `#2`, `#3`, `#4`) dengan isi menu yang identik, sehingga total tagihan membengkak Rp 212.000.
+  - **Penyebab Frontend**: Tombol konfirmasi pengiriman pesanan tambahan (`handleSubmitAddonOrder`) sebelumnya tidak memiliki state penguncian tombol (`isSubmitting`), sehingga multi-touch pada layar sentuh kasir, latensi jaringan internet, atau klik berulang yang tak disengaja mengirimkan request AJAX HTTP POST secara serentak/beruntun.
+  - **Penyebab Backend**: Endpoint `KasirController::addItemsToOrder` tidak memiliki pengaman idempoten (*idempotency guard*). Tiap request yang masuk berjarak milidetik langsung diproses satu per satu di database transaksi: mengambil `max(batch_no) + 1`, menambahkan item, dan melipatgandakan `order->total`.
+
+### 2. Implementasi Sistem Proteksi Ganda (Frontend & Backend)
+- **Frontend Locking & Throttling (`Kasir.jsx`)**:
+  - Menambahkan state `isSubmittingAddon` dan ref timestamp `lastAddonSubmitRef`.
+  - Pada fungsi `handleSubmitAddonOrder`:
+    - **Debounce Guard**: Jika selang waktu pengiriman kurang dari 2.500 ms (2,5 detik) dari pengiriman terakhir, aksi langsung diabaikan (`return`).
+    - **Loading State & Button Disable**: Tombol kirim menu tambahan langsung dinonaktifkan (`disabled={isSubmittingAddon}`), diberi efek visual `opacity-60 pointer-events-none cursor-not-allowed`, dan teks tombol berubah dinamis menjadi `⏳ Mengirim Menu Tambahan...`.
+    - Setelah response diterima dari server atau terjadi error (blok `finally`), state loading dinormalkan kembali.
+  - Proteksi serupa diterapkan pada tombol konfirmasi pembayaran kasir (`isSubmittingPayment` & `lastPaymentSubmitRef`) untuk mencegah double-payment.
+- **Backend Server-Side Idempotency Guard (`KasirController.php`)**:
+  - Pada method `addItemsToOrder`, sebelum membuka batch baru atau mengubah total pesanan, sistem melakukan inspeksi keselamatan:
+    - Memeriksa item-item yang baru saja dibuat dalam rentang 4 detik terakhir (`created_at >= now()->subSeconds(4)`) pada pesanan yang sama.
+    - Mengelompokkan item tersebut berdasarkan `batch_no` terakhir.
+    - Jika jumlah menu, ID makanan, dan quantity item yang masuk 100% identik dengan batch yang baru saja dibuat dalam 4 detik terakhir, sistem mendeteksi request tersebut sebagai duplikasi (double tap / network retry).
+    - Sistem langsung melakukan `DB::rollBack()` dan mengembalikan data order yang sudah ada tanpa membuat batch baru dan tanpa menaikkan total tagihan meja.
+
+---
+
+## 25 Oktober 2026 (Penyempurnaan Logika Status Tagihan Lunas vs Lunas Sebagian pada Struk & Monitor)
+
+### 1. Eliminasi Status Tagihan Palsu "Lunas Sebagian" Saat Semua Pesanan Telah Lunas
+- **Akar Masalah**:
+  - Pada pesanan multi-tahap (memiliki pesanan awal Batch 1 dan pesanan tambahan Batch 2+), ketika seluruh hidangan (baik awal maupun tambahan) telah dilunasi di kasir, struk pembayaran sebelumnya masih bisa menampilkan:
+    `Status Tagihan: ⚠️ LUNAS SEBAGIAN (ADA TAMBAHAN)`
+  - Penyebabnya: Kondisi sebelumnya di `Receipt.jsx` hanya memeriksa apakah status pesanan `'UNPAID'` dan uang yang masuk `> 0`. Kondisi tersebut tidak menghitung secara riil apakah sisa tagihan (`remainingDue = order.total - totalPaid`) sudah bernilai `0` (lunas seutuhnya).
+- **Penyempurnaan Logika di `Receipt.jsx`**:
+  - **Kalkulasi Sisa Tagihan Presisi**:
+    - `remainingDue = Math.max(0, orderTotal - totalPaid)`
+    - `isFullyPaid = (payment_status === 'PAID') || (orderTotal > 0 && remainingDue === 0 && totalPaid >= orderTotal)`
+    - `isPartiallyPaid = !isFullyPaid && !isDp && totalPaid > 0 && remainingDue > 0`
+  - **Hasil pada Struk Customer**:
+    - Jika seluruh pesanan awal dan tambahan sudah dibayar (tidak ada sisa tagihan lagi), status tagihan otomatis menjadi:
+      `Bayar Via: CASH (LUNAS)` / `QRIS (LUNAS)` / `SPLIT (LUNAS)`
+      dan status pembayaran akhir menampilkan: `✓ LUNAS (SELESAI)`.
+    - Peringatan merah `⚠️ LUNAS SEBAGIAN (ADA TAMBAHAN)` dan kotak `⚠️ TAGIHAN BELUM LUNAS` **100% DIHILANGKAN** jika tidak ada lagi sisa tagihan yang harus dibayar.
+    - Pada daftar menu per-batch, jika sudah lunas penuh, batch tambahan tidak lagi diberi embel-embel `(⚠️ BELUM BAYAR)`.
+
+### 2. Sinkronisasi Pelunasan dan Status Tambahan di Backend & Monitor
+- **`KasirController.php` (`addItemsToOrder`)**:
+  - Saat kasir menambah hidangan dan memilih opsi pembayaran langsung (`Cash`/`QRIS`/`SPLIT`), sistem memeriksa apakah total pembayaran yang sudah masuk telah menutup seluruh total pesanan (`payment->jumlah_bayar >= order->total`). Jika sudah cukup, status pesanan otomatis diset `'PAID'` (bukan menggantung di `'UNPAID'`).
+- **`OrderMonitor.jsx`**:
+  - Memperbaiki modal pembayaran kasir agar menghitung `targetBill = order.total - alreadyPaid`.
+  - Struk cetak otomatis setelah pelunasan di monitor langsung membawa data `isFullyPaid` yang lengkap dengan total nett pembayaran gabungan.
+
+---
+
+## 25 Oktober 2026 (Penyempurnaan Struk Order Cepat untuk Printer Thermal Hitam-Putih)
+
+### 1. Eliminasi Background Abu-Abu / Bayangan Hitam Printer Thermal
+- **Akar Masalah**: Pada cetakan printer thermal hitam-putih (monokrom), background warna `bg-gray-100` atau `bg-gray-50` dicetak oleh driver printer sebagai raster titik-titik (dithering) hitam pekat/bayangan abu-abu gelap. Akibatnya, teks hitam di atasnya menjadi sulit dibaca, buram, dan terkesan kotor.
+- **Penyempurnaan `Receipt.jsx`**:
+  - Menghilangkan seluruh class `bg-gray-*`, `bg-red-50`, dan `bg-amber-50` pada area struk cetak (Customer Receipt & Kitchen Ticket).
+  - Menggantinya dengan latar belakang polos putih bersih (`bg-transparent`) dengan garis batas hitam tegas (`border-y-2 border-black` / `border-dashed`).
+  - Hasil cetak di kertas thermal monokrom kini 100% tajam, kontras tinggi, dan tanpa bayangan/bercak hitam yang mengganggu.
+
+### 2. Penggantian Teks Header Order Cepat: "PESANAN LANGSUNG DIAMBIL"
+- **Akar Masalah**: Pada struk order cepat (Grab & Go), sebelumnya tercetak label `NO. MEJA: KASIR / BUNGKUS`. Hal ini kurang natural karena transaksi tersebut langsung diambil di tempat dan bukan untuk meja makan.
+- **Penyempurnaan `Receipt.jsx`**:
+  - Pada order dengan nomor meja `KASIR` (Kasir Cepat / Grab & Go), header meja digantikan dengan banner teks besar, tebal, dan terpusat:
+    `PESANAN LANGSUNG DIAMBIL`
+  - Font ukuran besar (`text-xl sm:text-2xl font-black uppercase text-black`) dengan border hitam atas-bawah yang bersih tanpa bayangan abu-abu.
+  - Untuk pesanan meja makan biasa (No. Meja 01 s/d 30), tetap menampilkan `NO. MEJA: NO. XX` dengan latar putih bersih.
+  - Footer struk customer untuk order cepat disesuaikan menjadi: `"Silakan Ambil Pesanan di Kasir"`.
+
+### 3. Penghapusan Box Catatan Otomatis yang Redundan
+- **Akar Masalah**: Sebelumnya, sistem kasir cepat otomatis mengisi catatan pesanan dengan teks `"Pesanan Kasir Cepat / Snack"`, sehingga di struk muncul kotak catatan berlatar abu-abu. Karena header sudah menyatakan `PESANAN LANGSUNG DIAMBIL`, kotak catatan ini menjadi berlebih/redundant dan menghabiskan kertas thermal.
+- **Penyempurnaan `Kasir.jsx` & `Receipt.jsx`**:
+  - Pada `Kasir.jsx`, default `orderNote` saat memilih mode Kasir Cepat dikosongkan (`setOrderNote('')`).
+  - Pada `Receipt.jsx`, ditambahkan filter agar string otomatis seperti `"Pesanan Kasir Cepat / Snack"` atau `"pesanan kasir"` tidak akan dirender di struk.
+  - Jika kasir memasukkan catatan khusus pelanggan (misal: "tanpa es", "sambal dipisah"), catatan tersebut tetap dicetak secara rapi dengan border bersih tanpa background abu-abu.
+
+### 4. Hasil Kompilasi & Pemaketan Hosting cPanel
+- **Kompilasi Vite**: Berhasil 100% via `npm run build` (vite v6.3.5, 2579 modul terkompilasi dalam 6.52s).
+- **File Arsip cPanel**: Berkas `d:\PA\CPH_Update_Kantin_September_2026.zip` (192.82 MB) telah diperbarui dan siap diunggah ke hosting cPanel via `make_update_zip.ps1`.
+
+---
+
 ## 22 Oktober 2026 (Penyempurnaan Struk Multi-Tahap, Penanganan Pesanan Menggantung Kemarin, & Fitur Kasir Cepat / Grab & Go)
 
 ### 1. Perbaikan Struk: Tagihan Belum Lunas & Status Bayar (Poin 1 & 3)

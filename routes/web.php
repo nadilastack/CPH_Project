@@ -204,6 +204,9 @@ Route::middleware(['auth', 'pos.access'])->group(function () {
     Route::post('/pos/order/{id}/add-items', [KasirController::class, 'addItemsToOrder'])->name('pos.order.add-items');
     Route::post('/pos/order-item/{id}/toggle-served', [KasirController::class, 'toggleOrderItemServed'])->name('pos.order-item.toggle-served');
     Route::post('/pos/order-item/{id}/cancel', [KasirController::class, 'cancelOrderItem'])->name('pos.order-item.cancel');
+    Route::post('/pos/order-item/{id}/restore', [KasirController::class, 'restoreOrderItem'])->name('pos.order-item.restore');
+    Route::post('/pos/order/{id}/cancel-batch/{batchNo}', [KasirController::class, 'cancelBatch'])->name('pos.order.cancel-batch');
+    Route::post('/pos/order/{id}/restore-batch/{batchNo}', [KasirController::class, 'restoreBatch'])->name('pos.order.restore-batch');
     Route::post('/pos/orders/cleanup-stale', [KasirController::class, 'cleanupStaleOrders'])->name('pos.orders.cleanup-stale');
     Route::post('/pos/table/{id}/reset', [KasirController::class, 'resetTable'])->name('pos.table.reset');
     Route::get('/pos/json-state', [KasirController::class, 'jsonState'])->name('pos.json.state');

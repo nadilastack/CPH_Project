@@ -316,10 +316,14 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
   // Buka Modal Bayar
   const handleOpenPaymentModal = (order) => {
     setPayingOrder(order);
-    const currMethod = order.payment?.metode_pembayaran || order.metode_pembayaran || 'QRIS';
+    const currMethod = order.payment?.metode_pembayaran || order.metode_pembayaran || 'Cash';
     setPaymentMethod(currMethod);
-    setCashAmountInput(order.total.toString());
-    setQrisAmountInput(order.total.toString());
+    const alreadyPaid = Number(order.payment?.jumlah_bayar || order.dp_amount || 0);
+    const targetBill = (alreadyPaid > 0 && order.payment_status !== 'PAID')
+      ? Math.max(0, Number(order.total) - alreadyPaid)
+      : Number(order.total);
+    setCashAmountInput(targetBill.toString());
+    setQrisAmountInput(targetBill.toString());
     setShowPaymentModal(true);
   };
 
@@ -327,6 +331,11 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
   const handleSubmitPayment = (e) => {
     e.preventDefault();
     if (!payingOrder) return;
+
+    const alreadyPaid = Number(payingOrder.payment?.jumlah_bayar || payingOrder.dp_amount || 0);
+    const targetBill = (alreadyPaid > 0 && payingOrder.payment_status !== 'PAID')
+      ? Math.max(0, Number(payingOrder.total) - alreadyPaid)
+      : Number(payingOrder.total);
 
     let bayarInt = 0;
     let cashVal = 0;
@@ -336,32 +345,32 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
       cashVal = parseInt(cashAmountInput) || 0;
       qrisVal = parseInt(qrisAmountInput) || 0;
       bayarInt = cashVal + qrisVal;
-      if (bayarInt < payingOrder.total) {
+      if (bayarInt < targetBill) {
         Swal.fire({
           icon: 'warning',
           title: 'Nominal Kurang',
-          text: `Total Cash + QRIS (${formatRp(bayarInt)}) kurang dari tagihan (${formatRp(payingOrder.total)})`,
+          text: `Total Cash + QRIS (${formatRp(bayarInt)}) kurang dari sisa tagihan (${formatRp(targetBill)})`,
         });
         return;
       }
     } else if (paymentMethod === 'Cash') {
       bayarInt = parseInt(cashAmountInput) || 0;
       cashVal = bayarInt;
-      if (bayarInt < payingOrder.total) {
+      if (bayarInt < targetBill) {
         Swal.fire({
           icon: 'warning',
           title: 'Nominal Kurang',
-          text: `Jumlah bayar tunai (${formatRp(bayarInt)}) kurang dari tagihan (${formatRp(payingOrder.total)})`,
+          text: `Jumlah bayar tunai (${formatRp(bayarInt)}) kurang dari sisa tagihan (${formatRp(targetBill)})`,
         });
         return;
       }
     } else { // QRIS
-      bayarInt = parseInt(qrisAmountInput) || payingOrder.total;
+      bayarInt = parseInt(qrisAmountInput) || targetBill;
       qrisVal = bayarInt;
       cashVal = 0;
     }
 
-    const kembalian = Math.max(0, bayarInt - payingOrder.total);
+    const kembalian = Math.max(0, bayarInt - targetBill);
     setIsSubmittingPayment(true);
 
     const isAlreadyPaid = payingOrder.payment_status === 'PAID';
@@ -402,9 +411,9 @@ export default function OrderMonitor({ tables = [], activeOrders = [] }) {
           payment_status: 'PAID',
           payment: {
             metode_pembayaran: paymentMethod,
-            jumlah_bayar: bayarInt,
-            cash_amount: cashVal,
-            qris_amount: qrisVal,
+            jumlah_bayar: isAlreadyPaid ? bayarInt : (alreadyPaid + bayarInt),
+            cash_amount: (Number(payingOrder.payment?.cash_amount || 0)) + cashVal,
+            qris_amount: (Number(payingOrder.payment?.qris_amount || 0)) + qrisVal,
             kembalian: kembalian,
           }
         };

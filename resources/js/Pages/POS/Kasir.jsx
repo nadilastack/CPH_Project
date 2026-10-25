@@ -202,9 +202,13 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
   const [paymentSplitCash, setPaymentSplitCash] = useState('');
   const [paymentSplitQris, setPaymentSplitQris] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [isSubmittingAddon, setIsSubmittingAddon] = useState(false);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
-  // Throttle ref to prevent double click
+  // Throttle refs to prevent double click / rapid touch bounce
   const lastAddClickRef = useRef(0);
+  const lastAddonSubmitRef = useRef(0);
+  const lastPaymentSubmitRef = useRef(0);
 
   // Auto Polling State every 5 seconds
   useEffect(() => {
@@ -250,7 +254,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
     setAddonCart([]);
     setCart([]);
     setCustomerName('Pelanggan Kasir');
-    setOrderNote('Pesanan Kasir Cepat / Snack');
+    setOrderNote('');
     setOrderSplitCash('');
     setOrderSplitQris('');
     setOrderDpAmount('');
@@ -284,7 +288,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
           setIsAddingAddon(false);
           setAddonCart([]);
           setCustomerName('Pelanggan Kasir');
-          setOrderNote('Pesanan Kasir Cepat / Snack');
+          setOrderNote('');
           setPaymentStatusOption('Cash');
           setCart([{ food_id: food.id, food: food, jumlah: 1, catatan: '' }]);
         }
@@ -348,10 +352,19 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
     });
   };
 
-  // Submit Addon Items to Kitchen
+  // Submit Addon Items to Kitchen (dengan Proteksi Double Click / Anti-Duplikat)
   const handleSubmitAddonOrder = () => {
     const activeOrder = selectedTable?.active_order;
     if (!activeOrder || addonCart.length === 0) return;
+
+    if (isSubmittingAddon) return;
+
+    const now = Date.now();
+    if (now - lastAddonSubmitRef.current < 2500) {
+      return; // Anti double tap / bounce
+    }
+    lastAddonSubmitRef.current = now;
+    setIsSubmittingAddon(true);
 
     const addonSubtotal = addonCart.reduce((sum, it) => sum + (it.jumlah * Number(it.food.harga || 0)), 0);
 
@@ -367,6 +380,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
       qris_amount: addonPaymentOption === 'QRIS' ? addonSubtotal : 0,
     }, {
       onSuccess: (page) => {
+        setIsSubmittingAddon(false);
         setIsAddingAddon(false);
         setAddonCart([]);
         setAddonPaymentOption('LATER');
@@ -390,6 +404,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
         }
       },
       onError: (err) => {
+        setIsSubmittingAddon(false);
         Swal.fire({ icon: 'error', title: 'Gagal Menambah Menu', text: Object.values(err).flat().join('\n') });
       }
     });
@@ -745,6 +760,15 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
     const activeOrder = selectedTable?.active_order;
     if (!activeOrder) return;
 
+    if (isSubmittingPayment) return;
+
+    const now = Date.now();
+    if (now - lastPaymentSubmitRef.current < 2500) {
+      return;
+    }
+    lastPaymentSubmitRef.current = now;
+    setIsSubmittingPayment(true);
+
     const alreadyPaid = Number(activeOrder.payment?.jumlah_bayar || activeOrder.dp_amount || 0);
     const targetBill = alreadyPaid > 0 ? Math.max(0, Number(activeOrder.total) - alreadyPaid) : Number(activeOrder.total);
 
@@ -757,6 +781,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
       qrisVal = parseInt(paymentSplitQris) || 0;
       bayarInt = cashVal + qrisVal;
       if (bayarInt < targetBill) {
+        setIsSubmittingPayment(false);
         Swal.fire({
           icon: 'warning',
           title: 'Pembayaran Split Kurang',
@@ -769,6 +794,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
       bayarInt = parseInt(jumlahBayar) || 0;
       cashVal = bayarInt;
       if (bayarInt < targetBill) {
+        setIsSubmittingPayment(false);
         Swal.fire({
           icon: 'warning',
           title: 'Pembayaran Kurang',
@@ -792,6 +818,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
       qris_amount: qrisVal,
     }, {
       onSuccess: () => {
+        setIsSubmittingPayment(false);
         if (soundEnabled) {
           playAudioAndVoice(`Pembayaran Nomor Antrian ${activeOrder?.table?.nomor_meja || ''} berhasil`);
         }
@@ -820,6 +847,7 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
         setShowReceiptModal(true);
       },
       onError: (err) => {
+        setIsSubmittingPayment(false);
         Swal.fire({ icon: 'error', title: 'Gagal Memproses Pembayaran', text: Object.values(err).join('\n') });
       }
     });
@@ -1398,9 +1426,21 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
                         <button
                           type="button"
                           onClick={handleSubmitAddonOrder}
-                          className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                          disabled={isSubmittingAddon}
+                          className={`w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all ${
+                            isSubmittingAddon ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+                          }`}
                         >
-                          🍳 Kirim Menu Tambahan ke Dapur
+                          {isSubmittingAddon ? (
+                            <>
+                              <span className="inline-block animate-spin mr-1">⏳</span>
+                              <span>Mengirim Menu Tambahan...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🍳 Kirim Menu Tambahan ke Dapur</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     );
@@ -2120,9 +2160,12 @@ export default function Kasir({ tables = [], categories = [], activeOrders = [] 
 
               <button
                 onClick={handleProcessPayment}
-                className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow"
+                disabled={isSubmittingPayment}
+                className={`w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow ${
+                  isSubmittingPayment ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+                }`}
               >
-                {isDpSettlement ? 'Konfirmasi & Lunasi Sisa Tagihan' : 'Konfirmasi & Selesaikan Pembayaran'}
+                {isSubmittingPayment ? 'Memproses Pembayaran...' : isDpSettlement ? 'Konfirmasi & Lunasi Sisa Tagihan' : 'Konfirmasi & Selesaikan Pembayaran'}
               </button>
             </div>
           </div>

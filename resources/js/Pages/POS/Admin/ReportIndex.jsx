@@ -10,7 +10,7 @@ import {
   FiBarChart2, FiCalendar, FiFileText, FiTrendingUp, FiUsers,
   FiShoppingBag, FiDollarSign, FiFilter, FiRefreshCw, FiCreditCard,
   FiPrinter, FiEdit2, FiSearch, FiX, FiClock, FiDownload, FiCheckCircle,
-  FiCoffee, FiCheck, FiBookOpen
+  FiCoffee, FiCheck, FiBookOpen, FiTrash2, FiRotateCcw
 } from 'react-icons/fi';
 import { FaChevronDown, FaFilePdf, FaFileExcel, FaEye } from 'react-icons/fa';
 import {
@@ -246,12 +246,241 @@ export default function ReportIndex({
     setEditPaymentStatus(order.payment_status || 'PAID');
     setEditPaymentMethod(currMethod);
     setEditCashAmount((order.payment?.cash_amount ?? (currMethod === 'Cash' ? order.total : 0)).toString());
-    setEditQrisAmount((order.payment?.qris_amount ?? (currMethod === 'QRIS' ? order.total : 0)).toString());
-    setEditKembalian(order.payment?.kembalian || 0);
+    const initialQris = currMethod === 'QRIS'
+      ? (order.total || 0).toString()
+      : (order.payment?.qris_amount ?? 0).toString();
+    setEditQrisAmount(initialQris);
+    setEditKembalian(currMethod === 'QRIS' ? 0 : (order.payment?.kembalian || 0));
     setEditNote(order.payment?.catatan_koreksi || '');
     setEditCustomerName(order.nama_pelanggan || '');
     setEditTableId(order.table_id || (order.table ? order.table.id : ''));
     setShowEditModal(true);
+  };
+
+  // Batalkan 1 Item langsung dari Modal Edit Laporan
+  const handleCancelItemFromReportModal = (item) => {
+    if (!editingOrder) return;
+    Swal.fire({
+      title: 'Batalkan Menu Ini?',
+      text: `Yakin ingin membatalkan ${item.jumlah}x ${item.food?.nama || 'Item'}? Tagihan transaksi akan otomatis berkurang Rp ${Number(item.subtotal).toLocaleString('id-ID')}.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Batalkan Menu',
+      cancelButtonText: 'Batal',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        router.post(route('pos.order-item.cancel', item.id), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            const newTotal = Math.max(0, (editingOrder.total || 0) - item.subtotal);
+            const updatedItems = (editingOrder.items || []).map(it =>
+              it.id === item.id ? { ...it, status: 'CANCELLED', batal_alasan: 'Dibatalkan oleh admin/kasir' } : it
+            );
+            const updatedOrder = {
+              ...editingOrder,
+              total: newTotal,
+              subtotal: Math.max(0, (editingOrder.subtotal || 0) - item.subtotal),
+              items: updatedItems,
+            };
+            setEditingOrder(updatedOrder);
+            setEditOrderTotal(newTotal.toString());
+            if (editPaymentMethod === 'Cash') {
+              setEditCashAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'QRIS') {
+              setEditQrisAmount(newTotal.toString());
+              setEditKembalian(0);
+            }
+            if (previewType) fetchPreview(previewType);
+            Swal.fire({
+              icon: 'success',
+              title: 'Menu Dibatalkan',
+              text: `Menu ${item.food?.nama || 'Item'} berhasil dibatalkan dan tagihan diperbarui.`,
+              timer: 1500,
+              showConfirmButton: false,
+            });
+          },
+          onError: (err) => {
+            Swal.fire({ icon: 'error', title: 'Gagal Membatalkan Menu', text: Object.values(err).flat().join('\n') });
+          }
+        });
+      }
+    });
+  };
+
+  // Batalkan Seluruh Menu pada Satu Batch (misal Batch Duplikat)
+  const handleCancelBatchFromReportModal = (batchNo, batchItems) => {
+    if (!editingOrder) return;
+    const activeItems = (batchItems || []).filter(it => it.status !== 'CANCELLED');
+    if (activeItems.length === 0) return;
+
+    const totalDeduction = activeItems.reduce((acc, it) => acc + (it.subtotal || 0), 0);
+    const batchTitle = batchNo === 1 ? 'Pesanan Awal (Batch #1)' : `Pesanan Tambahan #${batchNo - 1} (Batch #${batchNo})`;
+
+    Swal.fire({
+      title: `Batalkan Seluruh ${batchTitle}?`,
+      text: `Yakin ingin membatalkan seluruh menu pada ${batchTitle}? Sebanyak ${activeItems.length} menu senilai Rp ${totalDeduction.toLocaleString('id-ID')} akan dibatalkan dari tagihan.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Batalkan Batch Ini',
+      cancelButtonText: 'Kembali',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        router.post(route('pos.order.cancel-batch', [editingOrder.id, batchNo]), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            const newTotal = Math.max(0, (editingOrder.total || 0) - totalDeduction);
+            const updatedItems = (editingOrder.items || []).map(it =>
+              (it.batch_no || 1) === batchNo ? { ...it, status: 'CANCELLED', batal_alasan: 'Pembatalan batch duplikat' } : it
+            );
+            const updatedOrder = {
+              ...editingOrder,
+              total: newTotal,
+              subtotal: Math.max(0, (editingOrder.subtotal || 0) - totalDeduction),
+              items: updatedItems,
+            };
+            setEditingOrder(updatedOrder);
+            setEditOrderTotal(newTotal.toString());
+            if (editPaymentMethod === 'Cash') {
+              setEditCashAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'QRIS') {
+              setEditQrisAmount(newTotal.toString());
+              setEditKembalian(0);
+            }
+            if (previewType) fetchPreview(previewType);
+            Swal.fire({
+              icon: 'success',
+              title: 'Batch Berhasil Dibatalkan',
+              text: `${batchTitle} berhasil dibatalkan dan tagihan berkurang Rp ${totalDeduction.toLocaleString('id-ID')}.`,
+              timer: 1500,
+              showConfirmButton: false,
+            });
+          },
+          onError: (err) => {
+            Swal.fire({ icon: 'error', title: 'Gagal Membatalkan Batch', text: Object.values(err).flat().join('\n') });
+          }
+        });
+      }
+    });
+  };
+
+  // Pulihkan 1 Item yang Dibatalkan langsung dari Modal Edit Laporan
+  const handleRestoreItemFromReportModal = (item) => {
+    if (!editingOrder) return;
+    Swal.fire({
+      title: 'Pulihkan Menu Ini?',
+      text: `Aktifkan kembali ${item.jumlah}x ${item.food?.nama || 'Item'}? Tagihan transaksi akan bertambah kembali Rp ${Number(item.subtotal).toLocaleString('id-ID')}.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Pulihkan Menu',
+      cancelButtonText: 'Batal',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        router.post(route('pos.order-item.restore', item.id), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            const newTotal = (editingOrder.total || 0) + item.subtotal;
+            const updatedItems = (editingOrder.items || []).map(it =>
+              it.id === item.id ? { ...it, status: 'ACTIVE', batal_alasan: null } : it
+            );
+            const updatedOrder = {
+              ...editingOrder,
+              total: newTotal,
+              subtotal: (editingOrder.subtotal || 0) + item.subtotal,
+              items: updatedItems,
+            };
+            setEditingOrder(updatedOrder);
+            setEditOrderTotal(newTotal.toString());
+            if (editPaymentMethod === 'Cash') {
+              setEditCashAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'QRIS') {
+              setEditQrisAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'SPLIT') {
+              const half = Math.floor(newTotal / 2);
+              setEditCashAmount(half.toString());
+              setEditQrisAmount((newTotal - half).toString());
+            }
+            if (previewType) fetchPreview(previewType);
+            Swal.fire({
+              icon: 'success',
+              title: 'Menu Berhasil Dipulihkan!',
+              text: `Menu ${item.food?.nama || 'Item'} telah aktif kembali dan tagihan bertambah Rp ${Number(item.subtotal).toLocaleString('id-ID')}.`,
+              timer: 1500,
+              showConfirmButton: false,
+            });
+          },
+          onError: (err) => {
+            Swal.fire({ icon: 'error', title: 'Gagal Memulihkan Menu', text: Object.values(err).flat().join('\n') });
+          }
+        });
+      }
+    });
+  };
+
+  // Pulihkan Seluruh Menu pada Satu Batch yang Dibatalkan
+  const handleRestoreBatchFromReportModal = (batchNo, batchItems) => {
+    if (!editingOrder) return;
+    const cancelledItems = (batchItems || []).filter(it => it.status === 'CANCELLED');
+    if (cancelledItems.length === 0) return;
+
+    const totalAddition = cancelledItems.reduce((acc, it) => acc + (it.subtotal || 0), 0);
+    const batchTitle = batchNo === 1 ? 'Pesanan Awal (Batch #1)' : `Pesanan Tambahan #${batchNo - 1} (Batch #${batchNo})`;
+
+    Swal.fire({
+      title: `Pulihkan Seluruh ${batchTitle}?`,
+      text: `Aktifkan kembali seluruh menu pada ${batchTitle}? Sebanyak ${cancelledItems.length} menu senilai Rp ${totalAddition.toLocaleString('id-ID')} akan ditambahkan kembali ke tagihan.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Pulihkan Seluruh Batch',
+      cancelButtonText: 'Batal',
+    }).then((res) => {
+      if (res.isConfirmed) {
+        router.post(route('pos.order.restore-batch', [editingOrder.id, batchNo]), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            const newTotal = (editingOrder.total || 0) + totalAddition;
+            const updatedItems = (editingOrder.items || []).map(it =>
+              (it.batch_no || 1) === batchNo ? { ...it, status: 'ACTIVE', batal_alasan: null } : it
+            );
+            const updatedOrder = {
+              ...editingOrder,
+              total: newTotal,
+              subtotal: (editingOrder.subtotal || 0) + totalAddition,
+              items: updatedItems,
+            };
+            setEditingOrder(updatedOrder);
+            setEditOrderTotal(newTotal.toString());
+            if (editPaymentMethod === 'Cash') {
+              setEditCashAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'QRIS') {
+              setEditQrisAmount(newTotal.toString());
+            } else if (editPaymentMethod === 'SPLIT') {
+              const half = Math.floor(newTotal / 2);
+              setEditCashAmount(half.toString());
+              setEditQrisAmount((newTotal - half).toString());
+            }
+            if (previewType) fetchPreview(previewType);
+            Swal.fire({
+              icon: 'success',
+              title: 'Batch Berhasil Dipulihkan!',
+              text: `${batchTitle} berhasil dipulihkan dan tagihan bertambah Rp ${totalAddition.toLocaleString('id-ID')}.`,
+              timer: 1500,
+              showConfirmButton: false,
+            });
+          },
+          onError: (err) => {
+            Swal.fire({ icon: 'error', title: 'Gagal Memulihkan Batch', text: Object.values(err).flat().join('\n') });
+          }
+        });
+      }
+    });
   };
 
   const handleSavePaymentNote = (e) => {
@@ -927,266 +1156,407 @@ export default function ReportIndex({
       </div>
 
       {/* ======================================================== */}
-      {/* MODAL 1: UBAH METODE BAYAR & KOREKSI KASIR               */}
+      {/* MODAL 1: UBAH METODE BAYAR & KOREKSI KASIR (GRID 2-KOLOM) */}
       {/* ======================================================== */}
       {showEditModal && editingOrder && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-200">
-            <div className="p-4 bg-gradient-to-r from-amber-500 to-yellow-600 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-gray-200">
+            {/* PINNED HEADER (TIDAK AKAN KEPOTONG) */}
+            <div className="px-5 py-3.5 bg-gradient-to-r from-amber-500 to-yellow-600 text-white flex justify-between items-center shrink-0">
               <div>
-                <h3 className="font-extrabold text-sm flex items-center gap-2">
-                  <FiEdit2 size={16} /> Ubah Metode Bayar & Koreksi Kasir
+                <h3 className="font-extrabold text-sm sm:text-base flex items-center gap-2">
+                  <FiEdit2 size={18} /> Ubah Metode Bayar & Koreksi Kasir
                 </h3>
-                <p className="text-[11px] text-amber-100 mt-0.5">
-                  Order #{editingOrder.nomor_pesanan} • Meja {editingOrder.table?.nomor_meja || '--'}
+                <p className="text-xs text-amber-100 mt-0.5">
+                  Order #{editingOrder.nomor_pesanan} • Meja {editingOrder.table?.nomor_meja || '--'} • Pelanggan: {editingOrder.nama_pelanggan || 'Umum'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowEditModal(false)}
-                className="p-1 rounded-lg hover:bg-white/20 text-white transition-colors"
+                className="p-1.5 rounded-xl hover:bg-white/20 text-white transition-colors cursor-pointer"
               >
-                <FiX size={18} />
+                <FiX size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSavePaymentNote} className="p-5 space-y-4">
-              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Total Tagihan:</span>
-                  <span className="font-black text-sm text-green-700">{formatRp(editingOrder.total)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Metode Saat Ini:</span>
-                  <span className="font-extrabold text-gray-800 uppercase px-2 py-0.5 rounded bg-gray-200 text-[10px]">
-                    {editingOrder.payment?.metode_pembayaran || editingOrder.metode_pembayaran || (editingOrder.payment_status === 'UNPAID' ? 'BELUM BAYAR (UNPAID)' : 'CASH')}
-                  </span>
-                </div>
-              </div>
+            <form onSubmit={handleSavePaymentNote} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* SCROLLABLE 2-COLUMN BODY (MEMANFAATKAN LEBAR LAYAR) */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                  
+                  {/* === KOLOM KIRI: RINGKASAN & RINCIAN MENU PER-BATCH === */}
+                  <div className="space-y-3.5">
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 font-semibold">Total Tagihan Saat Ini:</span>
+                        <span className="font-black text-sm sm:text-base text-green-700">{formatRp(editingOrder.total)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500 font-semibold">Metode Tercatat:</span>
+                        <span className="font-extrabold text-gray-800 uppercase px-2 py-0.5 rounded bg-gray-200 text-[10px]">
+                          {editingOrder.payment?.metode_pembayaran || editingOrder.metode_pembayaran || (editingOrder.payment_status === 'UNPAID' ? 'BELUM BAYAR (UNPAID)' : 'CASH')}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* Edit Total Tagihan & Status Pembayaran */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Total Tagihan Pesanan (Rp):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={editOrderTotal}
-                    onChange={(e) => {
-                      const newTot = e.target.value;
-                      setEditOrderTotal(newTot);
-                      const totNum = parseInt(newTot) || 0;
-                      if (editPaymentMethod === 'Cash') {
-                        setEditCashAmount(totNum.toString());
-                      } else if (editPaymentMethod === 'QRIS') {
-                        setEditQrisAmount(totNum.toString());
-                      } else if (editPaymentMethod === 'SPLIT') {
-                        const half = Math.floor(totNum / 2);
-                        setEditCashAmount(half.toString());
-                        setEditQrisAmount((totNum - half).toString());
-                      }
-                    }}
-                    placeholder="Contoh: 100000"
-                    className="w-full px-3 py-2 border border-green-300 rounded-xl text-xs font-black text-green-800 focus:ring-2 focus:ring-amber-500 bg-green-50/50"
-                  />
-                  <span className="text-[10px] text-gray-500 mt-0.5 block">
-                    Bisa diubah jika ada DP/koreksi harga item.
-                  </span>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Status Pembayaran:
-                  </label>
-                  <select
-                    value={editPaymentStatus}
-                    onChange={(e) => setEditPaymentStatus(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:ring-2 focus:ring-amber-500 bg-white"
-                  >
-                    <option value="PAID">🟢 PAID (Lunas)</option>
-                    <option value="DP">🟡 DP (Uang Muka)</option>
-                    <option value="UNPAID">🔴 UNPAID (Belum Bayar)</option>
-                  </select>
-                </div>
-              </div>
+                    {/* DAFTAR MENU & PEMBATALAN ITEM / BATCH DUPLIKAT */}
+                    {editingOrder.items && editingOrder.items.length > 0 && (() => {
+                      const grouped = {};
+                      editingOrder.items.forEach(it => {
+                        const b = it.batch_no || 1;
+                        if (!grouped[b]) grouped[b] = [];
+                        grouped[b].push(it);
+                      });
+                      const batchKeys = Object.keys(grouped).sort((a, b) => Number(a) - Number(b));
 
-              {/* Edit Customer Name & Table */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Nama Pelanggan:
-                  </label>
-                  <input
-                    type="text"
-                    value={editCustomerName}
-                    onChange={(e) => setEditCustomerName(e.target.value)}
-                    placeholder="Contoh: Meja 5 / Bpk Andi"
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Nomor Meja:
-                  </label>
-                  <select
-                    value={editTableId}
-                    onChange={(e) => setEditTableId(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-amber-500 bg-white"
-                  >
-                    <option value="">-- Tanpa Meja (Takeaway) --</option>
-                    {tables && tables.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        Meja #{t.nomor_meja}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                      return (
+                        <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                              📋 Rincian Menu ({editingOrder.items.length} item)
+                            </span>
+                            <span className="text-[10px] text-amber-700">
+                              Klik tombol untuk batalkan item
+                            </span>
+                          </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1.5">
-                  Pilih Metode Pembayaran Baru:
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { id: 'Cash', label: '💵 Cash' },
-                    { id: 'QRIS', label: '📱 QRIS' },
-                    { id: 'SPLIT', label: '⚡ SPLIT' },
-                  ].map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        setEditPaymentMethod(m.id);
-                        const currTotal = parseInt(editOrderTotal) || editingOrder.total;
-                        if (m.id === 'QRIS') {
-                          setEditQrisAmount(currTotal.toString());
-                          setEditCashAmount('0');
-                        } else if (m.id === 'Cash') {
-                          setEditCashAmount(currTotal.toString());
-                          setEditQrisAmount('0');
-                        } else if (m.id === 'SPLIT') {
-                          const half = Math.floor(currTotal / 2);
-                          setEditCashAmount(half.toString());
-                          setEditQrisAmount((currTotal - half).toString());
-                        }
-                      }}
-                      className={`py-2 rounded-xl text-xs font-black transition-all ${
-                        editPaymentMethod === m.id
-                          ? (m.id === 'QRIS' ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300' :
-                             m.id === 'SPLIT' ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-300' :
-                             'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300')
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                          <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+                            {batchKeys.map(bKey => {
+                              const bNum = Number(bKey);
+                              const bItems = grouped[bKey];
+                              const activeBItems = bItems.filter(it => it.status !== 'CANCELLED');
+                              const batchSubtotal = activeBItems.reduce((acc, it) => acc + (it.subtotal || 0), 0);
+                              const isBatchEmpty = activeBItems.length === 0;
 
-              {editPaymentMethod === 'Cash' && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
-                  <div className="flex justify-between items-center text-xs font-bold text-emerald-900">
-                    <span>Uang Tunai Diterima (Rp):</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={editCashAmount}
-                      onChange={(e) => setEditCashAmount(e.target.value)}
-                      className="w-36 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black text-gray-900 text-xs"
-                      placeholder="0"
-                    />
+                              return (
+                                <div key={bKey} className={`p-2.5 rounded-xl border text-xs transition-all ${isBatchEmpty ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-amber-200 shadow-2xs'}`}>
+                                  <div className="flex justify-between items-center pb-2 mb-2 border-b border-gray-100 font-bold">
+                                    <span className={`text-[11px] ${bNum === 1 ? 'text-gray-800' : 'text-blue-800'}`}>
+                                      {bNum === 1 ? '▶ PESANAN AWAL (BATCH #1)' : `▶ PESANAN TAMBAHAN #${bNum - 1} (BATCH #${bNum})`}
+                                      {!isBatchEmpty && (
+                                        <span className="ml-1 text-[10px] font-semibold text-gray-500">
+                                          • Rp {batchSubtotal.toLocaleString('id-ID')}
+                                        </span>
+                                      )}
+                                    </span>
+                                    {!isBatchEmpty && bNum > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelBatchFromReportModal(bNum, bItems)}
+                                        className="px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-[10px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                        title="Batalkan seluruh menu pada batch duplikat ini"
+                                      >
+                                        <FiTrash2 size={11} /> Batal Batch Ini
+                                      </button>
+                                    )}
+                                    {isBatchEmpty && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRestoreBatchFromReportModal(bNum, bItems)}
+                                        className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10px] rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                        title="Pulihkan seluruh menu pada batch ini"
+                                      >
+                                        <FiRotateCcw size={11} /> Pulihkan Batch
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="space-y-1.5">
+                                    {bItems.map(item => {
+                                      const isCancelled = item.status === 'CANCELLED';
+                                      return (
+                                        <div key={item.id} className="flex justify-between items-center text-[11px] py-0.5">
+                                          <div className="flex-1 pr-2">
+                                            <span className={isCancelled ? 'line-through text-gray-400' : 'text-gray-800 font-medium'}>
+                                              {item.jumlah}x {item.food?.nama || 'Menu'}
+                                            </span>
+                                            {isCancelled && (
+                                              <span className="ml-1 text-[9px] font-bold text-red-500">(DIBATALKAN)</span>
+                                            )}
+                                            {item.catatan && (
+                                              <span className="block text-[9px] text-gray-400 italic">catatan: {item.catatan}</span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className={`font-semibold ${isCancelled ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                                              Rp {Number(item.subtotal).toLocaleString('id-ID')}
+                                            </span>
+                                            {!isCancelled ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleCancelItemFromReportModal(item)}
+                                                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                                title="Batalkan menu ini"
+                                              >
+                                                <FiTrash2 size={12} />
+                                              </button>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRestoreItemFromReportModal(item)}
+                                                className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold text-[10px] rounded-md transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                                title="Pulihkan / Aktifkan kembali menu ini"
+                                              >
+                                                <FiRotateCcw size={10} /> Pulihkan
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                  <p className="text-[11px] text-emerald-700">
-                    💡 Omzet akan otomatis dialokasikan ke kas fisik uang tunai.
-                  </p>
-                </div>
-              )}
 
-              {editPaymentMethod === 'QRIS' && (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1 text-xs text-blue-900">
-                  <div className="flex justify-between items-center font-bold">
-                    <span>Nominal Transfer QRIS:</span>
-                    <span className="font-black text-sm text-blue-800">{formatRp(parseInt(editQrisAmount) || (parseInt(editOrderTotal) || editingOrder.total))}</span>
-                  </div>
-                  <p className="text-[11px] text-blue-700 leading-relaxed">
-                    📱 Transaksi ini akan tercatat ke mutasi non-tunai QRIS.
-                  </p>
-                </div>
-              )}
+                  {/* === KOLOM KANAN: FORMULIR KOREKSI TOTAL & METODE BAYAR === */}
+                  <div className="space-y-3.5">
+                    {/* Edit Total Tagihan & Status Pembayaran */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Total Tagihan Pesanan (Rp):
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editOrderTotal}
+                          onChange={(e) => {
+                            const newTot = e.target.value;
+                            setEditOrderTotal(newTot);
+                            const totNum = parseInt(newTot) || 0;
+                            if (editPaymentMethod === 'Cash') {
+                              setEditCashAmount(totNum.toString());
+                            } else if (editPaymentMethod === 'QRIS') {
+                              setEditQrisAmount(totNum.toString());
+                            } else if (editPaymentMethod === 'SPLIT') {
+                              const half = Math.floor(totNum / 2);
+                              setEditCashAmount(half.toString());
+                              setEditQrisAmount((totNum - half).toString());
+                            }
+                          }}
+                          placeholder="Contoh: 100000"
+                          className="w-full px-3 py-2 border border-green-300 rounded-xl text-xs font-black text-green-800 focus:ring-2 focus:ring-amber-500 bg-green-50/50"
+                        />
+                        <span className="text-[10px] text-gray-500 mt-0.5 block">
+                          Bisa diubah manual atau via tombol batal menu di sebelah kiri.
+                        </span>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Status Pembayaran:
+                        </label>
+                        <select
+                          value={editPaymentStatus}
+                          onChange={(e) => setEditPaymentStatus(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-gray-800 focus:ring-2 focus:ring-amber-500 bg-white"
+                        >
+                          <option value="PAID">🟢 PAID (Lunas)</option>
+                          <option value="DP">🟡 DP (Uang Muka)</option>
+                          <option value="UNPAID">🔴 UNPAID (Belum Bayar)</option>
+                        </select>
+                      </div>
+                    </div>
 
-              {editPaymentMethod === 'SPLIT' && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-2 text-xs">
-                  <div className="flex justify-between items-center font-bold text-purple-900">
-                    <span>Porsi Uang Tunai (Rp):</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={editCashAmount}
-                      onChange={(e) => setEditCashAmount(e.target.value)}
-                      className="w-36 px-2 py-1 bg-white border border-purple-300 rounded-lg text-right font-black text-gray-900 text-xs"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="flex justify-between items-center font-bold text-purple-900">
-                    <span>Porsi QRIS (Rp):</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={editQrisAmount}
-                      onChange={(e) => setEditQrisAmount(e.target.value)}
-                      className="w-36 px-2 py-1 bg-white border border-purple-300 rounded-lg text-right font-black text-gray-900 text-xs"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-purple-200 font-extrabold text-purple-950">
-                    <span>Total Gabungan:</span>
-                    <span>{formatRp((parseInt(editCashAmount) || 0) + (parseInt(editQrisAmount) || 0))}</span>
-                  </div>
-                </div>
-              )}
+                    {/* Edit Customer Name & Table */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Nama Pelanggan:
+                        </label>
+                        <input
+                          type="text"
+                          value={editCustomerName}
+                          onChange={(e) => setEditCustomerName(e.target.value)}
+                          placeholder="Contoh: Meja 5 / Bpk Andi"
+                          className="w-full px-3 py-2 border rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                          Nomor Meja:
+                        </label>
+                        <select
+                          value={editTableId}
+                          onChange={(e) => setEditTableId(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-xl text-xs font-semibold text-gray-800 focus:ring-2 focus:ring-amber-500 bg-white"
+                        >
+                          <option value="">-- Tanpa Meja (Takeaway) --</option>
+                          {tables && tables.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              Meja #{t.nomor_meja}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Kembalian Tunai Diberikan (Rp) (Opsional):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={editKembalian}
-                  onChange={(e) => setEditKembalian(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl text-sm font-bold text-gray-800 focus:ring-2 focus:ring-amber-500"
-                  placeholder="0"
-                />
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        Pilih Metode Pembayaran Baru:
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'Cash', label: '💵 Cash' },
+                          { id: 'QRIS', label: '📱 QRIS' },
+                          { id: 'SPLIT', label: '⚡ SPLIT' },
+                        ].map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setEditPaymentMethod(m.id);
+                              const currTotal = parseInt(editOrderTotal) || editingOrder.total;
+                              if (m.id === 'QRIS') {
+                                setEditQrisAmount(currTotal.toString());
+                                setEditCashAmount('0');
+                                setEditKembalian(0);
+                              } else if (m.id === 'Cash') {
+                                setEditCashAmount(currTotal.toString());
+                                setEditQrisAmount('0');
+                              } else if (m.id === 'SPLIT') {
+                                const half = Math.floor(currTotal / 2);
+                                setEditCashAmount(half.toString());
+                                setEditQrisAmount((currTotal - half).toString());
+                              }
+                            }}
+                            className={`py-2 rounded-xl text-xs font-black transition-all ${
+                              editPaymentMethod === m.id
+                                ? (m.id === 'QRIS' ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300' :
+                                   m.id === 'SPLIT' ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-300' :
+                                   'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300')
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {editPaymentMethod === 'Cash' && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                        <div className="flex justify-between items-center text-xs font-bold text-emerald-900">
+                          <span>Uang Tunai Diterima (Rp):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editCashAmount}
+                            onChange={(e) => setEditCashAmount(e.target.value)}
+                            className="w-36 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-right font-black text-gray-900 text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                        <p className="text-[11px] text-emerald-700">
+                          💡 Omzet akan otomatis dialokasikan ke kas fisik uang tunai.
+                        </p>
+                      </div>
+                    )}
+
+                    {editPaymentMethod === 'QRIS' && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1 text-xs text-blue-900">
+                        <div className="flex justify-between items-center font-bold">
+                          <span>Nominal Transfer QRIS:</span>
+                          <span className="font-black text-sm text-blue-800">{formatRp(parseInt(editQrisAmount) || (parseInt(editOrderTotal) || editingOrder.total))}</span>
+                        </div>
+                        <p className="text-[11px] text-blue-700 leading-relaxed">
+                          📱 Transaksi ini akan tercatat ke mutasi non-tunai QRIS.
+                        </p>
+                      </div>
+                    )}
+
+                    {editPaymentMethod === 'SPLIT' && (
+                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-2 text-xs">
+                        <div className="flex justify-between items-center font-bold text-purple-900">
+                          <span>Porsi Uang Tunai (Rp):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editCashAmount}
+                            onChange={(e) => setEditCashAmount(e.target.value)}
+                            className="w-36 px-2 py-1 bg-white border border-purple-300 rounded-lg text-right font-black text-gray-900 text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="flex justify-between items-center font-bold text-purple-900">
+                          <span>Porsi QRIS (Rp):</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editQrisAmount}
+                            onChange={(e) => setEditQrisAmount(e.target.value)}
+                            className="w-36 px-2 py-1 bg-white border border-purple-300 rounded-lg text-right font-black text-gray-900 text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-purple-200 font-extrabold text-purple-950">
+                          <span>Total Gabungan:</span>
+                          <span>{formatRp((parseInt(editCashAmount) || 0) + (parseInt(editQrisAmount) || 0))}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-gray-700">
+                          Kembalian Tunai Diberikan (Rp) (Opsional):
+                        </label>
+                        {parseInt(editKembalian) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setEditKembalian(0)}
+                            className="text-[10px] font-bold text-red-600 hover:text-red-800 underline cursor-pointer"
+                          >
+                            Reset Kembalian ke Rp 0
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editKembalian}
+                        onChange={(e) => setEditKembalian(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-xl text-sm font-bold text-gray-800 focus:ring-2 focus:ring-amber-500"
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Catatan Koreksi Kasir (Penjelasan):
+                      </label>
+                      <textarea
+                        rows="2"
+                        value={editNote}
+                        onChange={(e) => setEditNote(e.target.value)}
+                        placeholder="Contoh: Pembatalan batch duplikat, salah tekan metode bayar, dll."
+                        className="w-full px-3 py-2 border rounded-xl text-xs text-gray-800 focus:ring-2 focus:ring-amber-500"
+                      ></textarea>
+                    </div>
+                  </div>
+
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Catatan Koreksi Kasir (Penjelasan):
-                </label>
-                <textarea
-                  rows="2"
-                  value={editNote}
-                  onChange={(e) => setEditNote(e.target.value)}
-                  placeholder="Contoh: Salah tekan Cash, pelanggan sebenarnya bayar via QRIS."
-                  className="w-full px-3 py-2 border rounded-xl text-xs text-gray-800 focus:ring-2 focus:ring-amber-500"
-                ></textarea>
-              </div>
-
-              <div className="flex gap-2 pt-2">
+              {/* PINNED FOOTER: SELALU TERLIHAT DI BAWAH & TIDAK KEPOTONG */}
+              <div className="px-5 py-3.5 bg-gray-50 border-t border-gray-200 flex justify-end items-center gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-colors"
+                  className="px-5 py-2.5 bg-white hover:bg-gray-100 text-gray-700 font-bold rounded-xl text-xs sm:text-sm border border-gray-300 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingNote}
-                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl text-xs shadow-sm transition-all disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white font-extrabold rounded-xl text-xs sm:text-sm shadow-md transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
                   {isSubmittingNote ? 'Menyimpan...' : '💾 Simpan Perubahan'}
                 </button>

@@ -486,6 +486,40 @@ class KasirController extends Controller
                 return back()->with('error', 'Pesanan yang sudah dibatalkan tidak dapat ditambah menu!');
             }
 
+            // Proteksi Anti-Duplikat (Idempotency Server-Side):
+            // Cek apakah pesanan ini baru saja menerima batch tambahan dengan item yang sama dalam 4 detik terakhir
+            $recentItems = PosOrderItem::where('order_id', $order->id)
+                ->where('created_at', '>=', now()->subSeconds(4))
+                ->get();
+
+            if ($recentItems->isNotEmpty()) {
+                $latestBatchNo = (int) $recentItems->max('batch_no');
+                $latestBatchItems = $recentItems->where('batch_no', $latestBatchNo);
+
+                if ($latestBatchItems->count() === count($request->items)) {
+                    $isDuplicate = true;
+                    foreach ($request->items as $reqItem) {
+                        $matched = $latestBatchItems->first(function ($it) use ($reqItem) {
+                            return (int)$it->food_id === (int)$reqItem['food_id']
+                                && (int)$it->jumlah === (int)$reqItem['jumlah'];
+                        });
+                        if (!$matched) {
+                            $isDuplicate = false;
+                            break;
+                        }
+                    }
+
+                    if ($isDuplicate) {
+                        DB::rollBack();
+                        $order->load(['table', 'cashier', 'items.food', 'payment']);
+                        return back()->with('warning', 'Menu tambahan sudah berhasil dikirim (duplikasi klik otomatis dicegah).')
+                            ->with('latestOrder', $order)
+                            ->with('newAddedItems', $latestBatchItems->values()->all())
+                            ->with('newBatchNo', $latestBatchNo);
+                    }
+                }
+            }
+
             $maxBatch = (int) ($order->items()->max('batch_no') ?: 1);
             $newBatchNo = $maxBatch + 1;
 
@@ -555,10 +589,19 @@ class KasirController extends Controller
                     }
                     $payment->save();
                 }
-                $order->payment_status = 'PAID';
+                if ($payment->jumlah_bayar >= $order->total) {
+                    $order->payment_status = 'PAID';
+                } else {
+                    $order->payment_status = 'UNPAID';
+                }
             } else {
-                // Jika ada pesanan tambahan yang belum dibayar, tandai UNPAID agar kasir ingat menagih
-                $order->payment_status = 'UNPAID';
+                // Jika kasir memilih bayar nanti (LATER), cek apakah pembayaran sebelumnya masih menutup total baru
+                $existingPaid = $order->payment ? (int)$order->payment->jumlah_bayar : 0;
+                if ($existingPaid >= $order->total && $order->total > 0) {
+                    $order->payment_status = 'PAID';
+                } else {
+                    $order->payment_status = 'UNPAID';
+                }
             }
 
             if ($order->order_status === 'COMPLETED' || $order->order_status === 'READY') {
@@ -625,12 +668,253 @@ class KasirController extends Controller
                 }
             }
 
+            // Jika pesanan sudah memiliki pembayaran, sinkronkan nilai pembayaran
+            if ($order->payment) {
+                $payment = $order->payment;
+                if ($payment->metode_pembayaran === 'QRIS') {
+                    $payment->qris_amount = $order->total;
+                    $payment->jumlah_bayar = $order->total;
+                    $payment->kembalian = 0;
+                } elseif ($payment->metode_pembayaran === 'Cash') {
+                    if ($payment->jumlah_bayar > $order->total) {
+                        $payment->kembalian = max(0, $payment->jumlah_bayar - $order->total);
+                    } else {
+                        $payment->cash_amount = $order->total;
+                        $payment->jumlah_bayar = $order->total;
+                        $payment->kembalian = 0;
+                    }
+                } elseif ($payment->metode_pembayaran === 'SPLIT') {
+                    if ($payment->cash_amount + $payment->qris_amount > $order->total) {
+                        $diff = ($payment->cash_amount + $payment->qris_amount) - $order->total;
+                        $payment->qris_amount = max(0, $payment->qris_amount - $diff);
+                        $payment->jumlah_bayar = $payment->cash_amount + $payment->qris_amount;
+                    }
+                }
+                $payment->save();
+            }
+
             DB::commit();
 
             return back()->with('success', 'Menu ' . ($item->food ? $item->food->nama : '') . ' berhasil dibatalkan. Total tagihan diperbarui.');
         } catch (\Exception $e) {
             DB::rollBack();
             return back()->with('error', 'Gagal membatalkan item: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Batal Seluruh Item dalam Satu Batch (misal Batch Duplikat)
+     */
+    public function cancelBatch(Request $request, $id, $batchNo)
+    {
+        $this->ensureColumnsExist();
+
+        try {
+            DB::beginTransaction();
+
+            $order = PosOrder::with(['payment', 'table'])->where('id', $id)->lockForUpdate()->firstOrFail();
+            $items = PosOrderItem::where('order_id', $order->id)
+                ->where('batch_no', (int)$batchNo)
+                ->where('status', 'ACTIVE')
+                ->lockForUpdate()
+                ->get();
+
+            if ($items->isEmpty()) {
+                DB::rollBack();
+                return back()->with('error', 'Tidak ada item aktif pada batch #' . $batchNo . '.');
+            }
+
+            $deductedSubtotal = 0;
+            foreach ($items as $item) {
+                $item->update([
+                    'status' => 'CANCELLED',
+                    'batal_alasan' => $request->alasan ?: 'Pembatalan batch duplikat #' . $batchNo,
+                ]);
+                $deductedSubtotal += $item->subtotal;
+            }
+
+            $order->subtotal = max(0, $order->subtotal - $deductedSubtotal);
+            $order->total = max(0, $order->total - $deductedSubtotal);
+            $order->save();
+
+            // Cek apakah masih ada item aktif
+            $activeCount = $order->items()->where('status', 'ACTIVE')->count();
+            if ($activeCount === 0) {
+                $order->update(['order_status' => 'CANCELLED']);
+                if ($order->table) {
+                    $order->table->update(['status' => 'AVAILABLE']);
+                }
+            }
+
+            // Sinkronkan nilai pembayaran jika sudah ada
+            if ($order->payment) {
+                $payment = $order->payment;
+                if ($payment->metode_pembayaran === 'QRIS') {
+                    $payment->qris_amount = $order->total;
+                    $payment->jumlah_bayar = $order->total;
+                    $payment->kembalian = 0;
+                } elseif ($payment->metode_pembayaran === 'Cash') {
+                    if ($payment->jumlah_bayar > $order->total) {
+                        $payment->kembalian = max(0, $payment->jumlah_bayar - $order->total);
+                    } else {
+                        $payment->cash_amount = $order->total;
+                        $payment->jumlah_bayar = $order->total;
+                        $payment->kembalian = 0;
+                    }
+                } elseif ($payment->metode_pembayaran === 'SPLIT') {
+                    if ($payment->cash_amount + $payment->qris_amount > $order->total) {
+                        $diff = ($payment->cash_amount + $payment->qris_amount) - $order->total;
+                        $payment->qris_amount = max(0, $payment->qris_amount - $diff);
+                        $payment->jumlah_bayar = $payment->cash_amount + $payment->qris_amount;
+                    }
+                }
+                $payment->save();
+            }
+
+            DB::commit();
+
+            return back()->with('success', 'Seluruh item pada Batch #' . $batchNo . ' berhasil dibatalkan. Tagihan dikurangi Rp ' . number_format($deductedSubtotal, 0, ',', '.') . '.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal membatalkan batch: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Pulihkan / Batalkan Pembatalan Item Tertentu (Restore single item)
+     */
+    public function restoreOrderItem(Request $request, $id)
+    {
+        $this->ensureColumnsExist();
+
+        try {
+            DB::beginTransaction();
+
+            $item = PosOrderItem::with('order.table', 'food')->where('id', $id)->lockForUpdate()->firstOrFail();
+            $order = $item->order;
+
+            if ($item->status !== 'CANCELLED') {
+                DB::rollBack();
+                return back()->with('error', 'Item ini masih aktif.');
+            }
+
+            // Kembalikan status item menjadi ACTIVE
+            $item->update([
+                'status' => 'ACTIVE',
+                'batal_alasan' => null,
+            ]);
+
+            // Tambahkan kembali subtotal ke order
+            $order->subtotal = $order->subtotal + $item->subtotal;
+            $order->total = $order->total + $item->subtotal;
+            if ($order->order_status === 'CANCELLED') {
+                $order->order_status = $order->payment_status === 'PAID' ? 'COMPLETED' : 'ACTIVE';
+            }
+            $order->save();
+
+            // Sinkronkan payment
+            if ($order->payment) {
+                $payment = $order->payment;
+                if ($payment->metode_pembayaran === 'QRIS') {
+                    $payment->qris_amount = $order->total;
+                    $payment->jumlah_bayar = $order->total;
+                    $payment->kembalian = 0;
+                } elseif ($payment->metode_pembayaran === 'Cash') {
+                    if ($payment->jumlah_bayar >= $order->total) {
+                        $payment->kembalian = max(0, $payment->jumlah_bayar - $order->total);
+                    } else {
+                        $payment->cash_amount = $order->total;
+                        $payment->jumlah_bayar = $order->total;
+                        $payment->kembalian = 0;
+                    }
+                } elseif ($payment->metode_pembayaran === 'SPLIT') {
+                    $diff = $order->total - ($payment->cash_amount + $payment->qris_amount);
+                    if ($diff > 0) {
+                        $payment->qris_amount = $payment->qris_amount + $diff;
+                        $payment->jumlah_bayar = $payment->cash_amount + $payment->qris_amount;
+                    }
+                }
+                $payment->save();
+            }
+
+            DB::commit();
+
+            return back()->with('success', 'Menu ' . ($item->food ? $item->food->nama : '') . ' berhasil dipulihkan. Total tagihan dikembalikan.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal memulihkan item: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Pulihkan Seluruh Item dalam Satu Batch (Restore whole batch)
+     */
+    public function restoreBatch(Request $request, $id, $batchNo)
+    {
+        $this->ensureColumnsExist();
+
+        try {
+            DB::beginTransaction();
+
+            $order = PosOrder::with(['payment', 'table'])->where('id', $id)->lockForUpdate()->firstOrFail();
+            $items = PosOrderItem::where('order_id', $order->id)
+                ->where('batch_no', (int)$batchNo)
+                ->where('status', 'CANCELLED')
+                ->lockForUpdate()
+                ->get();
+
+            if ($items->isEmpty()) {
+                DB::rollBack();
+                return back()->with('error', 'Tidak ada item yang dibatalkan pada batch #' . $batchNo . '.');
+            }
+
+            $restoredSubtotal = 0;
+            foreach ($items as $item) {
+                $item->update([
+                    'status' => 'ACTIVE',
+                    'batal_alasan' => null,
+                ]);
+                $restoredSubtotal += $item->subtotal;
+            }
+
+            $order->subtotal = $order->subtotal + $restoredSubtotal;
+            $order->total = $order->total + $restoredSubtotal;
+            if ($order->order_status === 'CANCELLED') {
+                $order->order_status = $order->payment_status === 'PAID' ? 'COMPLETED' : 'ACTIVE';
+            }
+            $order->save();
+
+            // Sinkronkan payment
+            if ($order->payment) {
+                $payment = $order->payment;
+                if ($payment->metode_pembayaran === 'QRIS') {
+                    $payment->qris_amount = $order->total;
+                    $payment->jumlah_bayar = $order->total;
+                    $payment->kembalian = 0;
+                } elseif ($payment->metode_pembayaran === 'Cash') {
+                    if ($payment->jumlah_bayar >= $order->total) {
+                        $payment->kembalian = max(0, $payment->jumlah_bayar - $order->total);
+                    } else {
+                        $payment->cash_amount = $order->total;
+                        $payment->jumlah_bayar = $order->total;
+                        $payment->kembalian = 0;
+                    }
+                } elseif ($payment->metode_pembayaran === 'SPLIT') {
+                    $diff = $order->total - ($payment->cash_amount + $payment->qris_amount);
+                    if ($diff > 0) {
+                        $payment->qris_amount = $payment->qris_amount + $diff;
+                        $payment->jumlah_bayar = $payment->cash_amount + $payment->qris_amount;
+                    }
+                }
+                $payment->save();
+            }
+
+            DB::commit();
+
+            return back()->with('success', 'Seluruh item pada Batch #' . $batchNo . ' berhasil dipulihkan. Total tagihan bertambah Rp ' . number_format($restoredSubtotal, 0, ',', '.') . '.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Gagal memulihkan batch: ' . $e->getMessage());
         }
     }
 
