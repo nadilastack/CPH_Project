@@ -62,6 +62,39 @@ export default function Sidebar({ header, children }) {
     reset();
   };
 
+  const userRole = (auth.user?.role || '').toLowerCase();
+  const roleTitle = userRole === 'admin'
+    ? 'Akun Admin'
+    : userRole === 'kasir'
+    ? 'Akun Kasir'
+    : userRole === 'dapur'
+    ? 'Akun Dapur'
+    : 'Akun Pengguna';
+
+  const roleSubtitle = userRole === 'admin'
+    ? 'Administrator System'
+    : userRole === 'kasir'
+    ? 'Kasir POS Operasional'
+    : userRole === 'dapur'
+    ? 'Dapur & Kitchen Display'
+    : 'Pengguna Sistem';
+
+  const roleBadgeBg = userRole === 'admin'
+    ? 'bg-amber-100 text-amber-800 border-amber-300'
+    : userRole === 'kasir'
+    ? 'bg-green-100 text-green-800 border-green-300'
+    : userRole === 'dapur'
+    ? 'bg-orange-100 text-orange-800 border-orange-300'
+    : 'bg-blue-100 text-blue-800 border-blue-300';
+
+  const roleDotColor = userRole === 'admin'
+    ? 'bg-amber-500'
+    : userRole === 'kasir'
+    ? 'bg-green-500'
+    : userRole === 'dapur'
+    ? 'bg-orange-500'
+    : 'bg-blue-500';
+
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Mobile Overlay */}
@@ -174,84 +207,84 @@ export default function Sidebar({ header, children }) {
           {/* USER INFO (Fixed Bottom) */}
           <div className="relative border-t p-3 shrink-0 bg-white z-10">
             {showProfile && expanded && (
-              <div className="absolute bottom-full left-3 mb-2 w-72 bg-white rounded-xl shadow-2xl border border-green-100 overflow-hidden z-50 animate-fade-in-up">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-green-600 to-green-500 p-4">
-                  <div className="flex justify-between items-start text-white">
-                    <div>
-                      <h3 className="font-bold text-lg">Akun Admin</h3>
-                      <p className="text-xs text-green-100 opacity-90">Administrator System</p>
+              <div className="absolute bottom-full left-2 right-2 mb-2 bg-white rounded-xl shadow-2xl border border-green-200 overflow-hidden z-50 animate-fade-in-up">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-green-600 to-green-500 p-3.5">
+                    <div className="flex justify-between items-start text-white">
+                      <div>
+                        <h3 className="font-bold text-base">{roleTitle}</h3>
+                        <p className="text-xs text-green-100 opacity-90">{roleSubtitle}</p>
+                      </div>
+                      <button
+                        onClick={handleCloseProfile}
+                        className="text-white/80 hover:text-white transition-colors bg-white/10 rounded-full p-1"
+                      >
+                        <FiX size={16} />
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex border-b border-gray-200">
                     <button
-                      onClick={handleCloseProfile}
-                      className="text-white/80 hover:text-white transition-colors bg-white/10 rounded-full p-1"
+                      onClick={() => setActiveTab('info')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${activeTab === 'info'
+                        ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        }`}
                     >
-                      <FiX size={16} />
+                      <FiUser size={13} /> Info Akun
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('password')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${activeTab === 'password'
+                        ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                      <FiLock size={13} /> Password
                     </button>
                   </div>
-                </div>
 
-                {/* Tabs */}
-                <div className="flex border-b border-gray-200">
-                  <button
-                    onClick={() => setActiveTab('info')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${activeTab === 'info'
-                      ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    <FiUser size={13} /> Info Akun
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('password')}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold transition-colors ${activeTab === 'password'
-                      ? 'text-green-600 border-b-2 border-green-600 bg-green-50/50'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    <FiLock size={13} /> Password
-                  </button>
-                </div>
+                  {/* Tab Content */}
+                  {activeTab === 'info' ? (
+                    <div className="p-3.5 bg-white space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg shrink-0">
+                          <FiUser size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Nama Pengguna</label>
+                          <p className="text-sm font-semibold text-gray-800 truncate">{auth.user?.name}</p>
+                        </div>
+                      </div>
 
-                {/* Tab Content */}
-                {activeTab === 'info' ? (
-                  <div className="p-4 bg-white space-y-4">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                        <FiUser size={18} />
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg shrink-0">
+                          <FiFileText size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Email</label>
+                          <p className="text-xs font-semibold text-gray-800 break-all">{auth.user?.email}</p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Nama Pengguna</label>
-                        <p className="text-sm font-semibold text-gray-800">{auth.user?.name}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                        <FiFileText size={18} />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Email</label>
-                        <p className="text-sm font-semibold text-gray-800 break-all">{auth.user?.email}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                        <FiSettings size={18} />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Role Akses</label>
-                        <div className="mt-1">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-100 text-green-700 border border-green-200 text-xs font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                            ADMIN
-                          </span>
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg shrink-0">
+                          <FiSettings size={16} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Role Akses</label>
+                          <div className="mt-0.5">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-xs font-bold uppercase ${roleBadgeBg}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${roleDotColor}`}></span>
+                              {auth.user?.role || 'USER'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
+                  ) : (
                   <form onSubmit={handlePasswordUpdate} className="p-4 bg-white space-y-3">
                     {recentlySuccessful && (
                       <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 font-medium">

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Checkbox from '@/Components/Checkbox';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
@@ -10,9 +11,87 @@ export default function Login({ status, canResetPassword }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
-        remember: false,
+        remember: true,
         showPassword: false,
     });
+
+    // Cek parameter role di URL (?role=admin atau ?role=kasir atau ?role=customer)
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const role = params.get('role');
+            if (role === 'admin') {
+                setData((prev) => ({
+                    ...prev,
+                    email: 'centralpalantea@gmail.com',
+                    password: 'AdminCPH24@',
+                    remember: true,
+                    showPassword: true,
+                }));
+            } else if (role === 'kasir') {
+                setData((prev) => ({
+                    ...prev,
+                    email: 'kasir@cph.com',
+                    password: 'KasirCPH24@',
+                    remember: true,
+                    showPassword: true,
+                }));
+            } else if (role === 'dapur') {
+                setData((prev) => ({
+                    ...prev,
+                    email: 'dapur@cph.com',
+                    password: 'DapurCPH24@',
+                    remember: true,
+                    showPassword: true,
+                }));
+            } else if (role === 'customer') {
+                setData((prev) => ({
+                    ...prev,
+                    email: 'testing@cph.com',
+                    password: 'Testing123!',
+                    remember: true,
+                    showPassword: true,
+                }));
+            }
+        }
+    }, []);
+
+    // Fungsi klik tombol cepat isi akun
+    const fillAccount = (role) => {
+        if (role === 'admin') {
+            setData((prev) => ({
+                ...prev,
+                email: 'centralpalantea@gmail.com',
+                password: 'AdminCPH24@',
+                remember: true,
+                showPassword: true,
+            }));
+        } else if (role === 'kasir') {
+            setData((prev) => ({
+                ...prev,
+                email: 'kasir@cph.com',
+                password: 'KasirCPH24@',
+                remember: true,
+                showPassword: true,
+            }));
+        } else if (role === 'dapur') {
+            setData((prev) => ({
+                ...prev,
+                email: 'dapur@cph.com',
+                password: 'DapurCPH24@',
+                remember: true,
+                showPassword: true,
+            }));
+        } else if (role === 'customer') {
+            setData((prev) => ({
+                ...prev,
+                email: 'testing@cph.com',
+                password: 'Testing123!',
+                remember: true,
+                showPassword: true,
+            }));
+        }
+    };
 
     const submit = (e) => {
         e.preventDefault();
@@ -25,18 +104,75 @@ export default function Login({ status, canResetPassword }) {
         <GuestLayout>
             <Head title="Login" />
 
-            <div className="w-full max-w-md mx-auto bg-white border shadow-md rounded-lg p-6 mt-10">
-                <div className="text-center mb-6">
-                    <img src="/storage/logo/logoo.png" alt="Logo" className="w-14 mx-auto" />
-                    <h1 className="text-2xl font-bold text-green-700 mt-2">Log In</h1>
-                    <p className="text-sm text-gray-500">Silakan masuk untuk melanjutkan</p>
+            <div className="w-full max-w-md mx-auto bg-white border shadow-md rounded-2xl p-6 mt-8">
+                <div className="text-center mb-5">
+                    <img src="/storage/logo/logoo.png" alt="Logo" className="w-16 mx-auto" />
+                    <h1 className="text-2xl font-black text-green-700 mt-2">Log In</h1>
+                    <p className="text-xs text-gray-500">Pusat Akses Sistem Central Palantea</p>
                 </div>
 
                 {status && (
-                    <div className="mb-4 text-sm font-medium text-green-600">
+                    <div className="mb-4 text-sm font-medium text-green-600 bg-green-50 p-2.5 rounded-lg border border-green-200 text-center">
                         {status}
                     </div>
                 )}
+
+                {/* Quick Auto-Fill Role Buttons (4 Roles) */}
+                <div className="mb-5 bg-gradient-to-r from-gray-50 to-green-50/40 border border-gray-200 rounded-xl p-3 shadow-inner">
+                    <p className="text-[11px] font-bold text-gray-600 mb-2 text-center uppercase tracking-wider flex items-center justify-center gap-1">
+                        <span>⚡</span> Masuk Cepat 1-Klik (Auto-Fill)
+                    </p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => fillAccount('admin')}
+                            className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                                data.email === 'centralpalantea@gmail.com'
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-300'
+                                    : 'bg-white border-gray-200 text-gray-700 hover:bg-amber-50 hover:border-amber-300'
+                            }`}
+                        >
+                            <span className="text-sm">👑</span>
+                            <span>Admin</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => fillAccount('kasir')}
+                            className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                                data.email === 'kasir@cph.com'
+                                    ? 'bg-green-600 text-white border-green-700 shadow-md ring-2 ring-green-300'
+                                    : 'bg-white border-gray-200 text-gray-700 hover:bg-green-50 hover:border-green-300'
+                            }`}
+                        >
+                            <span className="text-sm">🛒</span>
+                            <span>Kasir</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => fillAccount('dapur')}
+                            className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                                data.email === 'dapur@cph.com'
+                                    ? 'bg-orange-600 text-white border-orange-700 shadow-md ring-2 ring-orange-300'
+                                    : 'bg-white border-gray-200 text-gray-700 hover:bg-orange-50 hover:border-orange-300'
+                            }`}
+                        >
+                            <span className="text-sm">🍳</span>
+                            <span>Dapur</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => fillAccount('customer')}
+                            className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                                data.email === 'testing@cph.com'
+                                    ? 'bg-blue-600 text-white border-blue-700 shadow-md ring-2 ring-blue-300'
+                                    : 'bg-white border-gray-200 text-gray-700 hover:bg-blue-50 hover:border-blue-300'
+                            }`}
+                        >
+                            <span className="text-sm">👤</span>
+                            <span>User</span>
+                        </button>
+                    </div>
+                </div>
 
                 <form onSubmit={submit} className="space-y-4">
                     <div>
@@ -107,12 +243,10 @@ export default function Login({ status, canResetPassword }) {
                     </div>
 
                     <div className="flex justify-center">
-                        <PrimaryButton className="bg-green-600 hover:bg-green-700 focus:ring-green-500 px-6" disabled={processing}>
-                            Masuk
+                        <PrimaryButton className="bg-green-600 hover:bg-green-700 focus:ring-green-500 w-full justify-center py-2.5 text-sm font-bold shadow-md rounded-xl" disabled={processing}>
+                            Masuk Sekarang
                         </PrimaryButton>
                     </div>
-
-
 
                     <p className="text-center text-sm text-gray-600">
                         Belum punya akun?{' '}

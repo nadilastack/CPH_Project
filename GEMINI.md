@@ -43,8 +43,21 @@
   - **Bypass Validasi Nama**: Nama pelanggan otomatis terisi `"Pelanggan Kasir"` (bebas diedit jika kasir ingin mencantumkan nama).
   - **Status Instan**: Pesanan kasir cepat otomatis berstatus `COMPLETED` dan `is_served = 1` tanpa membebani antrian masak dapur koki, serta langsung memicu cetak Struk Customer dalam hitungan detik.
 
-### 5. Hasil Uji & Kompilasi
-- `npm run build` sukses 100% tanpa error (vite v6.3.5, 2579 modul terkompilasi rapi).
+### 5. Hasil Uji, Kompilasi & Pemaketan Hosting cPanel
+- **Kompilasi Vite**: Berhasil 100% via `npm run build` (vite v6.3.5, 2579 modul terkompilasi rapi tanpa error).
+- **File Arsip cPanel**: Berkas `d:\PA\CPH_Update_Kantin_September_2026.zip` (191.17 MB) telah berhasil diperbarui dan dipaketkan via `make_update_zip.ps1`, mencakup:
+  - Bundle aset frontend terbaru (`public/build`).
+  - Backend controller (`KasirController.php`), model, dan rute (`web.php`).
+  - Seluruh komponen antarmuka POS (`Kasir.jsx`, `Receipt.jsx`, `OrderMonitor.jsx`).
+  - Berkas migrasi database DP (`2026_10_16_100000_add_dp_status_and_dp_amount_to_pos_orders.php`).
+  - Helper deployment cPanel (`public/setup_cpanel.php`).
+
+### 6. Panduan Deployment ke cPanel Jagoan Hosting
+1. Login ke cPanel hosting -> Buka **File Manager**.
+2. Masuk ke folder root aplikasi (atau folder project CPH).
+3. Upload dan ekstrak file `d:\PA\CPH_Update_Kantin_September_2026.zip` (replace/overwrite file lama).
+4. Buka URL: `https://centralpalantea.my.id/setup_cpanel.php` di browser untuk otomatis membersihkan cache rute/config dan menyinkronkan migrasi/data.
+5. Hapus file `setup_cpanel.php` setelah selesai.
 
 ## 16 Oktober 2026 (Pembaruan Lengkap Buku Panduan Operasional Kasir & Modal Panduan In-App)
 
@@ -2393,3 +2406,175 @@ Pengguna mengajukan 5 kebutuhan peningkatan operasional pada sistem POS Kasir da
 - **File**: `resources/js/Pages/Dashboard.jsx`
 - **Masalah**: Gambar produk di bagian "Stok Menipis" tidak muncul karena menggunakan field yang salah (`p.foto` seharusnya `p.gambar`)
 - **Solusi**: Mengganti `p.foto` menjadi `p.gambar` pada line 174 sesuai dengan field di model `Produk.php`
+
+## 24 Oktober 2026
+
+### Pembuatan Shortcut Desktop Aplikasi Kasir Mandiri & Ikon Resmi Central Palantea
+- **Aset Ikon Windows**:
+  - Mengekstrak dan mengonversi logo asli storage/app/public/logo/logoo.png menjadi format multi-resolution Windows Icon:
+    - public/central_palantea.ico (256x256 pixel icon untuk shortcut Windows)
+    - public/favicon.ico (Favicon web browser)
+  - Menyalin folder logo ke public/storage/logo/ untuk keandalan rendering struk thermal dan kop cetak.
+- **Shortcut Desktop Windows**:
+  - Dibuat di Desktop pengguna:
+    1. C:\Users\M S I\Desktop\Kasir Central Palantea.lnk (Target: http://centralpalantea.my.id/pos)
+    2. C:\Users\M S I\Desktop\Kasir CPH (Lokal).lnk (Target: http://127.0.0.1:8000/pos)
+  - **Konfigurasi Argumen**:
+    - --app="[URL]": Membuka aplikasi kasir dalam jendela mandiri (*Standalone App Window*) tanpa address bar (URL bar), tab browser, dan navigasi browser, sehingga berpenampilan dan terasa 100% seperti aplikasi desktop native PC.
+    - --kiosk-printing: Mengaktifkan *silent direct printing* tanpa menampilkan pop-up dialog print bawaan browser ke printer thermal kasir default.
+    - Ikon kustom langsung mengarah ke D:\PA\CPH_Project\public\central_palantea.ico.
+
+### Perbaikan URL Shortcut Desktop Kasir (Route /order)
+- **Masalah**: Shortcut sebelumnya mengarah ke /pos yang menghasilkan error 404 | NOT FOUND karena rute kasir utama di outes/web.php adalah /order (bukan /pos). Shortcut lokal juga menampilkan ERR_CONNECTION_REFUSED jika web server lokal (php artisan serve) belum diaktifkan.
+- **Solusi**: Memperbarui target URL shortcut desktop Windows:
+  - Kasir Central Palantea.lnk -> https://centralpalantea.my.id/order
+  - Kasir CPH (Lokal).lnk -> http://127.0.0.1:8000/order
+- **Hasil**: Shortcut online otomatis membuka sistem kasir Central Palantea secara langsung (atau halaman login jika sesi belum aktif).
+
+### Pembaruan Ikon Aplikasi Kasir: Latar Belakang Putih Kontras (White Squircle)
+- **Kebutuhan**: Ikon transparan sebelumnya kurang terlihat jelas pada wallpaper desktop Windows yang gelap atau bermotif.
+- **Implementasi**:
+  - Mengonversi ulang logo resmi logoo.png ke dalam canvas ikon 256x256 dengan bingkai rounded square (*squircle*) berlatar belakang **putih solid** (#FFFFFF) dan border halus.
+  - Memperbarui file aset public/central_palantea.ico dan public/favicon.ico.
+  - Mengonfigurasi ulang icon target pada shortcut Kasir Central Palantea.lnk dan Kasir CPH (Lokal).lnk.
+  - Memanggil SHChangeNotify untuk menyegarkan cache ikon Windows Shell secara instan.
+- **Hasil**: Ikon aplikasi di desktop terlihat jauh lebih kontras, cerah, elegan, dan menonjol di semua jenis wallpaper.
+
+### Pembuatan 3 Aplikasi Desktop Mandiri & Fitur Auto-Fill Login 1-Klik
+- **3 Shortcut Desktop Windows Mandiri**:
+  - Dibuat 3 shortcut dengan profil terisolasi (--user-data-dir) agar masing-masing sesi login tidak saling bentrok/logout:
+    1. Website Central Palantea.lnk -> Menuju ke https://centralpalantea.my.id/ (Mode Publik/Customer, profil CPH_Web)
+    2. Admin Central Palantea.lnk -> Menuju ke https://centralpalantea.my.id/login?role=admin (Mode Admin Dashboard, profil CPH_Admin)
+    3. Kasir Central Palantea.lnk -> Menuju ke https://centralpalantea.my.id/login?role=kasir (Mode POS Kasir, silent print, profil CPH_Kasir)
+  - Seluruh icon menggunakan logo resmi Central Palantea berlatar belakang putih solid squircle (public/central_palantea.ico).
+- **Pembaruan Halaman Login (esources/js/Pages/Auth/Login.jsx)**:
+  - Menambahkan panel interaktif **⚡ Masuk Cepat 1-Klik (Auto-Fill)** di atas formulir login:
+    - Tombol [👑 Admin]: Otomatis mengisi email centralpalantea@gmail.com dan password AdminCPH24@.
+    - Tombol [🛒 Kasir]: Otomatis mengisi email kasir@cph.com dan password KasirCPH24@.
+    - Tombol [👤 Customer]: Otomatis mengisi email 	esting@cph.com dan password Testing123!.
+  - Mendukung pembacaan parameter URL ?role=admin, ?role=kasir, dan ?role=customer sehingga saat shortcut desktop dibuka, form login sudah terisi otomatis tanpa perlu mengetik huruf apa pun.
+  - Checkbox "Ingat saya" aktif secara default (emember: true).
+- **Build & Packaging**:
+  - 
+pm run build sukses dalam 8.55 detik.
+  - File arsip cPanel d:\PA\CPH_Update_Kantin_September_2026.zip (191.29 MB) telah diperbarui memuat file Login.jsx, favicon, icon desktop, dan bundle aset terbaru.
+
+### Penerapan Ikon 3D Aplikasi Baru & Penyederhanaan Nama Shortcut Desktop ("CPH")
+- **Aset Ikon 3D Baru**:
+  - Mengonversi gambar ikon 3D resmi Central Palantea beresolusi tinggi 1024x1024 menjadi:
+    - public/cph_app_icon.ico (Format multi-size Windows Icon)
+    - public/cph_app_icon.png (PNG resolusi penuh)
+    - public/central_palantea.ico & public/favicon.ico
+- **Penyederhanaan Nama Shortcut Desktop**:
+  - Menghapus shortcut dengan nama panjang sebelumnya dan menggantinya dengan 3 shortcut ringkas:
+    1. **Website CPH.lnk** (Target: https://centralpalantea.my.id/, profil CPH_Web)
+    2. **Admin CPH.lnk** (Target: https://centralpalantea.my.id/login?role=admin, profil CPH_Admin)
+    3. **Kasir CPH.lnk** (Target: https://centralpalantea.my.id/login?role=kasir, silent print, profil CPH_Kasir)
+  - Seluruh shortcut menggunakan ikon 3D baru dan cache ikon Windows telah disegarkan via SHChangeNotify.
+- **Packaging Hosting**:
+  - Memperbarui arsip zip d:\PA\CPH_Update_Kantin_September_2026.zip (193.54 MB) memuat seluruh aset ikon 3D dan konfigurasi terbaru.
+
+### Pembersihan Background Putih Luar Ikon 3D (Full Transparency Mask)
+- **Masalah**: Gambar asli berformat JPEG memiliki sudut luar putih (*white corners*) di sekeliling bentuk squircle hijau sehingga saat dijadikan icon Windows terlihat seperti kotak dengan siku-siku putih.
+- **Solusi**:
+  - Mengimplementasikan algoritma BFS (*Breadth-First Search Flood-Fill*) untuk mendeteksi dan menghapus seluruh piksel putih di luar batas squircle hijau menjadi transparan penuh (Alpha = 0).
+  - Menghasilkan file gambar transparan jernih public/cph_transparent.png.
+  - Mengonversi ulang ke Windows Icon beresolusi tinggi dengan channel transparansi penuh: public/cph_app_icon_transparent.ico dan public/favicon.ico.
+  - Memperbarui target icon pada ketiga shortcut di desktop Windows (Website CPH, Admin CPH, Kasir CPH).
+  - Memanggil SHChangeNotify untuk menyegarkan ikon desktop secara instan.
+- **Hasil**: Ikon aplikasi di desktop kini murni hanya bentuk squircle hijau 3D Central Palantea tanpa ada latar/bingkai putih di sudut-sudutnya.
+
+### Pembaruan Ikon Aplikasi dari Gambar Versi Baru Pengguna (media_1792854905317_01ea44d2.jpg)
+- **Sumber Gambar**: Menerima file gambar ikon 3D versi terbaru dengan latar sudut hitam dari pengguna.
+- **Pemrosesan Gambar**:
+  - Melakukan masking transparansi pada sudut hitam di luar batas squircle hijau agar bentuk ikon membulat mulus (*transparent squircle*) tanpa latar kotak.
+  - Mengonversi ke ikon Windows multi-size public/cph_icon_v2.ico, public/cph_icon_v2.png, public/central_palantea.ico, dan public/favicon.ico.
+- **Pembaruan Shortcut Desktop**:
+  - Mengarahkan IconLocation pada ketiga shortcut desktop:
+    1. Website CPH.lnk
+    2. Admin CPH.lnk
+    3. Kasir CPH.lnk
+    ke file ikon baru public/cph_icon_v2.ico.
+  - Memanggil SHChangeNotify untuk memastikan ikon di layar Desktop pengguna langsung berubah.
+- **Pembaruan Arsip cPanel**:
+  - d:\PA\CPH_Update_Kantin_September_2026.zip (194.7 MB) diperbarui dengan aset ikon baru.
+
+### Pembuatan Ikon Khusus Terpisah & Pembeda Visual untuk Masing-Masing Aplikasi CPH
+- **Masalah**: Pengguna melaporkan bahwa tampilan ketiga ikon di desktop masih sama persis (*kembar tiga*) sehingga sulit membedakan secara visual mana Website, mana Admin, dan mana Kasir.
+- **Solusi**:
+  - Membuat 3 ikon terpisah berbasis aset 3D hijau berkualitas tinggi dengan badge identitas khas:
+    1. **Website CPH.lnk**: Menggunakan public/cph_website.ico (Ikon 3D Hijau murni/original Central Palantea).
+    2. **Admin CPH.lnk**: Menggunakan public/cph_admin.ico (Ikon 3D Hijau dilengkapi pill badge emas elegan **ADMIN** di sudut kanan atas).
+    3. **Kasir CPH.lnk**: Menggunakan public/cph_kasir.ico (Ikon 3D Hijau dilengkapi pill badge oranye kontras **KASIR** di sudut kanan atas).
+  - Memperbarui path target icon pada seluruh file shortcut desktop Windows.
+  - Memanggil SHChangeNotify dan menyegarkan atribut file .lnk agar Windows Explorer memuat ikon baru secara instan.
+
+### Perbaikan Kerusakan Sudut Ikon: Penggunaan Foto Asli Langsung Pakai (Zero Artifacts)
+- **Masalah**: Pada sudut kiri atas ikon muncul efek potongan/cresen abu-abu karena algoritma pembersih background sebelumnya salah menganggap sudut gradasi 3D sebagai latar belakang dan menghapusnya.
+- **Koreksi**:
+  - Menghilangkan proses manipulasi/penghapusan pixel (*background removal*).
+  - Mengambil file asli media_1792854905317_01ea44d2.jpg yang sudah disiapkan oleh pengguna secara utuh (*langsung pakai*).
+  - Mengonversi langsung dengan resampling kualitas tertinggi HighQualityBicubic ke dalam:
+    1. public/cph_web_pure.ico (100% foto asli murni)
+    2. public/cph_admin_pure.ico (Foto asli murni + badge emas ADMIN)
+    3. public/cph_kasir_pure.ico (Foto asli murni + badge oranye KASIR)
+  - Memperbarui file shortcut desktop Windows dan menyegarkan cache explorer shell.
+- **Hasil**: Sudut kiri atas ikon kembali utuh 100%, mulus, dan tidak ada lagi efek rusak/terpotong.
+
+### Penerapan Ikon Murni 100% Foto Asli Pengguna Tanpa Badge & Flush Icon Cache Explorer
+- **Permintaan Pengguna**: Menggunakan murni foto asli yang dikirimkan pengguna tanpa badge, tanpa tambahan tulisan, dan tanpa manipulasi apapun untuk ketiga aplikasi.
+- **Implementasi**:
+  - Mengonversi langsung file gambar asli media_1792901053659_6228da9a.jpg tanpa filter / masking ke dalam public/cph_icon_clean_v100.ico dan public/cph_icon_clean.png.
+  - Mengonfigurasi seluruh shortcut (Website CPH, Admin CPH, Kasir CPH) menggunakan ikon murni tersebut.
+  - Merestart proses explorer.exe untuk mengosongkan cache ikon Windows (IconCache.db) sehingga Windows Explorer dipaksa memuat dan menampilkan ikon baru secara langsung di Desktop.
+
+### Perbaikan Popover Profil Terpotong & Penambahan Shortcut Dapur CPH (4 Aplikasi)
+- **Perbaikan UI Popover Profil User (`Sidebar.jsx`)**:
+  - **Masalah Terpotong**: Lebar popover profil sebelumnya `w-72` (288px) melebihi lebar sidebar `w-64` (256px) sehingga sisi kanan kartu dan tab "Password" terpotong oleh `overflow-hidden`.
+  - **Solusi**: Mengubah positioning popover menjadi `left-2 right-2` sehingga kartu profil selalu pas berada di dalam batas sidebar tanpa ada teks atau tombol yang terpotong.
+  - **Dinamisasi Role & Judul**: Menghilangkan teks statis "Akun Admin" dan "ADMIN". Judul kartu, deskripsi, warna badge, dan indikator status kini merender dinamis sesuai role yang sedang login (`Akun Admin / Administrator System`, `Akun Kasir / Kasir POS Operasional`, `Akun Dapur / Dapur & Kitchen Display`).
+- **Pembaruan Halaman Login (`Login.jsx`)**:
+  - Menambahkan tombol cepat ke-4: `[🍳 Dapur]` yang otomatis mengisi `dapur@cph.com` dan password `DapurCPH24@`.
+- **Penambahan Shortcut Desktop ke-4 (Dapur CPH)**:
+  - Dibuat shortcut baru: `C:\Users\M S I\Desktop\Dapur CPH.lnk`
+  - Target: `chrome.exe --app="https://centralpalantea.my.id/login?role=dapur" --user-data-dir=".../CPH_Dapur"`
+  - Ikon: Memakai ikon murni 3D CPH yang sama (`public/cph_icon_clean_v100.ico`).
+  - Kini di desktop pengguna lengkap terdapat 4 aplikasi mandiri:
+    1. `Website CPH`
+    2. `Admin CPH`
+    3. `Kasir CPH`
+    4. `Dapur CPH`
+
+### Standarisasi Tunggal Ikon Resmi TrueColor PNG-in-ICO & Pembersihan Seluruh File Ikon Eksperimen
+- **Masalah Visual**:
+  - Penggunaan fungsi legacy .NET `GetHicon()` sebelumnya menurunkan kedalaman warna ikon menjadi 16/256 warna GDI palette bitmap yang terkompresi rusak (pixelated, muncul artefak buram/gray di sudut).
+- **Solusi Definitif**:
+  - Mengimplementasikan spesifikasi binary modern Windows Vista/10/11: **PNG-in-ICO TrueColor 32-bit ARGB** (`cph_official.ico`).
+  - Mengambil foto asli `media_1792902457181_9d6f3b3f.jpg` yang diunggah pengguna 100% apa adanya tanpa modifikasi, tanpa badge, dan tanpa filter.
+  - Menghapus seluruh 10 file `.ico` eksperimen lama dari direktori `public/`.
+  - Mengarahkan ke-4 shortcut desktop (`Website CPH`, `Admin CPH`, `Kasir CPH`, `Dapur CPH`) ke file tunggal `cph_official.ico`.
+  - Mengosongkan file database cache ikon Windows (`IconCache.db`) dan merestart Explorer sehingga seluruh shortcut di Desktop merender gambar asli dengan kualitas HD 100% mulus dan tajam.
+
+### Pembersihan Latar Hitam Luar Menjadi Transparan Penuh (Lossless Alpha Masking)
+- **Klarifikasi Pengguna**: Pengguna mengonfirmasi bahwa foto yang diunggah sebenarnya sudah dihapus background-nya di editor gambar, namun karena tersimpan dalam format `.jpg` (yang tidak mendukung transparansi), area transparan otomatis berubah menjadi warna hitam pekat (`#000000`).
+- **Solusi**:
+  - Mengonversi warna hitam luar hasil ekspor JPEG tersebut menjadi transparansi murni (`Alpha = 0`) secara presisi tanpa memotong atau merusak gradasi highlight 3D hijau Central Palantea sedikit pun.
+  - Membungkus gambar 256x256 ber-channel alpha 32-bit ke dalam format `public/cph_perfect_trans.ico`, `public/cph_official.ico`, dan `public/favicon.ico`.
+  - Mengarahkan ke-4 shortcut desktop (`Website CPH`, `Admin CPH`, `Kasir CPH`, `Dapur CPH`) ke file ikon transparan ini.
+  - Mengosongkan cache Explorer dan me-restart `explorer.exe` sehingga di Desktop Windows hanya tampak bentuk rounded squircle hijau 3D yang melayang mulus di atas wallpaper tanpa ada tepi hitam maupun putih.
+
+### Pendaftaran Shortcut ke Start Menu Windows & Pembukaan Langsung via File Explorer
+- **Kondisi**: Pengguna sempat tidak menemukan posisi ikon di Desktop (mungkin tertutup jendela aplikasi lain atau tergeser saat explorer restart).
+- **Tindakan**:
+  - Mendaftarkan seluruh 4 shortcut ke direktori resmi Start Menu Windows:
+    `C:\Users\M S I\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Central Palantea\`
+    sehingga pengguna bisa langsung menekan tombol Windows / Search dan mengetik "Kasir CPH", "Admin CPH", dll.
+  - Membuka jendela File Explorer secara otomatis langsung mengarah dan menyorot file `Kasir CPH.lnk` di Desktop agar pengguna langsung melihatnya secara visual di layar.
+
+### Kompilasi Penuh Vite Frontend CPH & Pembaruan Paket ZIP cPanel (192.82 MB)
+- **Diagnosa Masalah "Masih Sama"**:
+  - Perintah kompilasi `npm run build` sebelumnya tereksekusi pada direktori kerja default `d:\Portofolio` dan bukan `d:\PA\CPH_Project`, sehingga file bundle di `public/build` Central Palantea masih memuat file build lama tanggal 24/10. Akibatnya saat diekstrak ke cPanel, perubahan popover profil dan dinamisasi role akun belum teraplikasi di browser pengguna.
+- **Tindakan Perbaikan**:
+  - Memperbaiki sintaks JSX popover profil di `Sidebar.jsx` (memindahkan definisi variabel role ke scope utama komponen).
+  - Mengeksekusi kompilasi Vite resmi pada direktori `D:\PA\CPH_Project`: `vite v6.3.5` berhasil mentransformasikan 2.579 modul (30.14s) menghasilkan bundle `app-DCHU_v2h.js` dan `Sidebar-CH_S9Dtl.js`.
+  - Mengompresi ulang paket cPanel update ke `d:\PA\CPH_Update_Kantin_September_2026.zip` (192.82 MB) yang memuat manifest dan build aset terbaru.

@@ -55,6 +55,7 @@ $dbItems = @(
     "database\migrations\2026_10_12_222000_add_is_served_to_pos_order_items_table.php",
     "database\migrations\2026_10_13_130000_add_split_payment_and_correction_notes_to_pos_tables.php",
     "database\migrations\2026_10_14_190000_add_batch_no_to_pos_order_items_table.php",
+    "database\migrations\2026_10_16_100000_add_dp_status_and_dp_amount_to_pos_orders.php",
     "database\seeders\DatabaseSeeder.php",
     "database\seeders\PosSeeder.php"
 )
@@ -75,7 +76,8 @@ Copy-Item (Join-Path $sourceDir "routes\web.php") (Join-Path $tempDir "routes\we
 $resItems = @(
     "resources\js\Components\Bar\Sidebar.jsx",
     "resources\js\Layouts\CustomerLayout.jsx",
-    "resources\js\Pages\POS"
+    "resources\js\Pages\POS",
+    "resources\js\Pages\Auth\Login.jsx"
 )
 
 foreach ($file in $resItems) {
@@ -95,7 +97,16 @@ New-Item -ItemType Directory -Path (Join-Path $tempDir "public") -Force | Out-Nu
 Copy-Item (Join-Path $sourceDir "public\setup_cpanel.php") (Join-Path $tempDir "public\setup_cpanel.php") -Force
 Copy-Item (Join-Path $sourceDir "public\robots.txt") (Join-Path $tempDir "public\robots.txt") -Force
 Copy-Item (Join-Path $sourceDir "public\sitemap.xml") (Join-Path $tempDir "public\sitemap.xml") -Force
+Copy-Item (Join-Path $sourceDir "public\favicon.ico") (Join-Path $tempDir "public\favicon.ico") -Force
+Copy-Item (Join-Path $sourceDir "public\central_palantea.ico") (Join-Path $tempDir "public\central_palantea.ico") -Force
+Copy-Item (Join-Path $sourceDir "public\cph_official.ico") (Join-Path $tempDir "public\cph_official.ico") -Force
+Copy-Item (Join-Path $sourceDir "public\cph_perfect_trans.ico") (Join-Path $tempDir "public\cph_perfect_trans.ico") -Force
 Copy-Item (Join-Path $sourceDir "public\build") (Join-Path $tempDir "public") -Recurse -Force
+
+if (Test-Path (Join-Path $sourceDir "public\storage\logo")) {
+    New-Item -ItemType Directory -Path (Join-Path $tempDir "public\storage") -Force | Out-Null
+    Copy-Item (Join-Path $sourceDir "public\storage\logo") (Join-Path $tempDir "public\storage") -Recurse -Force
+}
 
 if (Test-Path (Join-Path $sourceDir "public\storage\pos_foods")) {
     New-Item -ItemType Directory -Path (Join-Path $tempDir "public\storage") -Force | Out-Null
