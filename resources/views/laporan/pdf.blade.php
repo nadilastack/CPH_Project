@@ -43,6 +43,34 @@
         <p>Tanggal Cetak: {{ date('d/m/Y H:i') }}</p>
     </div>
 
+    {{-- SUMMARY REKAPITULASI PENJUALAN (OMZET, CASH, QRIS, TRANSAKSI) --}}
+    @if(isset($summary))
+    <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 8px 0;">
+        <tr>
+            <td style="width: 25%; padding: 12px 10px; background-color: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: #166534; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL PENJUALAN (OMZET)</div>
+                <div style="font-size: 15px; font-weight: bold; color: #15803d; margin-top: 5px;">Rp {{ number_format($summary['total_omzet'] ?? 0, 0, ',', '.') }}</div>
+                <div style="font-size: 8px; color: #16a34a; margin-top: 3px;">Akumulasi omzet lunas</div>
+            </td>
+            <td style="width: 25%; padding: 12px 10px; background-color: #ecfdf5; border: 1.5px solid #6ee7b7; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: #065f46; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL KAS TUNAI (CASH)</div>
+                <div style="font-size: 15px; font-weight: bold; color: #047857; margin-top: 5px;">Rp {{ number_format($summary['total_cash'] ?? 0, 0, ',', '.') }}</div>
+                <div style="font-size: 8px; color: #059669; margin-top: 3px;">Pemasukan uang fisik</div>
+            </td>
+            <td style="width: 25%; padding: 12px 10px; background-color: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: #1e40af; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL NON-TUNAI (QRIS)</div>
+                <div style="font-size: 15px; font-weight: bold; color: #2563eb; margin-top: 5px;">Rp {{ number_format($summary['total_qris'] ?? 0, 0, ',', '.') }}</div>
+                <div style="font-size: 8px; color: #3b82f6; margin-top: 3px;">Mutasi QRIS / Bank</div>
+            </td>
+            <td style="width: 25%; padding: 12px 10px; background-color: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; text-align: center;">
+                <div style="font-size: 9px; color: #334155; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">TOTAL TRANSAKSI</div>
+                <div style="font-size: 15px; font-weight: bold; color: #0f172a; margin-top: 5px;">{{ number_format($summary['total_transaksi'] ?? 0, 0, ',', '.') }} Pesanan</div>
+                <div style="font-size: 8px; color: #64748b; margin-top: 3px;">Jumlah order terlayani</div>
+            </td>
+        </tr>
+    </table>
+    @endif
+
     {{-- TOP PRODUCTS SECTION (For Penjualan Report) --}}
     @if(isset($topProducts) && count($topProducts) > 0)
     <div class="top-section">
